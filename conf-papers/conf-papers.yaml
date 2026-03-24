@@ -1,0 +1,39 @@
+# conf-papers skill dedicated configuration
+
+# Keywords of interest (used to filter papers from top conferences)
+keywords:
+  - "large language model"
+  - "LLM"
+  - "pre-training"
+  - "fine-tuning"
+  - "foundation model"
+  - "transformer"
+  - "instruction tuning"
+  - "RLHF"
+  - "alignment"
+  - "reasoning"
+  - "chain-of-thought"
+  - "in-context learning"
+  - "scaling law"
+
+# Excluded keywords
+excluded_keywords:
+  - "3D"
+  - "review"
+  - "workshop"
+  - "survey"
+  - "tutorial"
+
+# Default search year (can be overridden by command-line arguments)
+default_year: 2025
+
+# Default conferences to search (can be overridden by command-line arguments, case-insensitive)
+# Options: CVPR, ICCV, ECCV, ICLR, AAAI, NeurIPS, ICML
+default_conferences:
+  - "ICLR"
+  - "NeurIPS"
+  - "ICML"
+  - "CVPR"
+
+# Number of papers to return
+top_n: 10

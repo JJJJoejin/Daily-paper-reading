@@ -1,0 +1,417 @@
+{
+  "target_date": "2026-03-24",
+  "date_windows": {
+    "recent_30d": {
+      "start": "2026-02-22",
+      "end": "2026-03-24"
+    },
+    "past_year": {
+      "start": "2025-03-24",
+      "end": "2026-02-21"
+    }
+  },
+  "total_recent": 200,
+  "total_hot": 5,
+  "total_unique": 165,
+  "top_papers": [
+    {
+      "id": "http://arxiv.org/abs/2603.22213v1",
+      "title": "SPA: A Simple but Tough-to-Beat Baseline for Knowledge Injection",
+      "summary": "While large language models (LLMs) are pretrained on massive amounts of data, their knowledge coverage remains incomplete in specialized, data-scarce domains, motivating extensive efforts to study synthetic data generation for knowledge injection. We propose SPA (Scaling Prompt-engineered Augmentation), a simple but tough-to-beat baseline that uses a small set of carefully designed prompts to generate large-scale synthetic data for knowledge injection. Through systematic comparisons, we find that SPA outperforms several strong baselines. Furthermore, we identify two key limitations of prior approaches: (1) while RL-based methods may improve the token efficiency of LLM-based data augmentation at small scale, they suffer from diversity collapse as data scales, leading to diminishing returns; and (2) while multi-stage prompting may outperform simple augmentation methods, their advantages can disappear after careful prompt tuning. Our results suggest that, for knowledge injection, careful prompt design combined with straightforward large-scale augmentation can be surprisingly effective, and we hope SPA can serve as a strong baseline for future studies in this area. Our code is available at https://github.com/Tangkexian/SPA.",
+      "authors": [
+        "Kexian Tang",
+        "Jiani Wang",
+        "Shaowen Wang",
+        "Kaifeng Lyu"
+      ],
+      "published": "2026-03-23T17:11:43Z",
+      "published_date": "2026-03-23 17:11:43+00:00",
+      "updated": "2026-03-23T17:11:43Z",
+      "categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.CL"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.22213v1",
+      "url": "http://arxiv.org/abs/2603.22213v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.9,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 1.5,
+        "recommendation": 9.7
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "LLM",
+        "RAG",
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "SPA_A_Simple_but_Tough-to-Beat_Baseline_for_Knowledge_Injection"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.22281v1",
+      "title": "ThinkJEPA: Empowering Latent World Models with Large Vision-Language Reasoning Model",
+      "summary": "Recent progress in latent world models (e.g., V-JEPA2) has shown promising capability in forecasting future world states from video observations. Nevertheless, dense prediction from a short observation window limits temporal context and can bias predictors toward local, low-level extrapolation, making it difficult to capture long-horizon semantics and reducing downstream utility. Vision--language models (VLMs), in contrast, provide strong semantic grounding and general knowledge by reasoning over uniformly sampled frames, but they are not ideal as standalone dense predictors due to compute-driven sparse sampling, a language-output bottleneck that compresses fine-grained interaction states into text-oriented representations, and a data-regime mismatch when adapting to small action-conditioned datasets. We propose a VLM-guided JEPA-style latent world modeling framework that combines dense-frame dynamics modeling with long-horizon semantic guidance via a dual-temporal pathway: a dense JEPA branch for fine-grained motion and interaction cues, and a uniformly sampled VLM \\emph{thinker} branch with a larger temporal stride for knowledge-rich guidance. To transfer the VLM's progressive reasoning signals effectively, we introduce a hierarchical pyramid representation extraction module that aggregates multi-layer VLM representations into guidance features compatible with latent prediction. Experiments on hand-manipulation trajectory prediction show that our method outperforms both a strong VLM-only baseline and a JEPA-predictor baseline, and yields more robust long-horizon rollout behavior.",
+      "authors": [
+        "Haichao Zhang",
+        "Yijiang Li",
+        "Shwai He",
+        "Tushar Nagarajan",
+        "Mingfei Chen",
+        "Jianglin Lu",
+        "Ang Li",
+        "Yun Fu"
+      ],
+      "published": "2026-03-23T17:59:42Z",
+      "published_date": "2026-03-23 17:59:42+00:00",
+      "updated": "2026-03-23T17:59:42Z",
+      "categories": [
+        "cs.CV",
+        "cs.AI",
+        "cs.CL",
+        "cs.LG",
+        "cs.RO"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.22281v1",
+      "url": "http://arxiv.org/abs/2603.22281v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.3,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 2.0,
+        "recommendation": 9.07
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "grounding",
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "ThinkJEPA_Empowering_Latent_World_Models_with_Large_Vision-Language_Reasoning_Model"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.21975v1",
+      "title": "SecureBreak -- A dataset towards safe and secure models",
+      "summary": "Large language models are becoming pervasive core components in many real-world applications. As a consequence, security alignment represents a critical requirement for their safe deployment. Although previous related works focused primarily on model architectures and alignment methodologies, these approaches alone cannot ensure the complete elimination of harmful generations. This concern is reinforced by the growing body of scientific literature showing that attacks, such as jailbreaking and prompt injection, can bypass existing security alignment mechanisms. As a consequence, additional security strategies are needed both to provide qualitative feedback on the robustness of the obtained security alignment at the training stage, and to create an ``ultimate'' defense layer to block unsafe outputs possibly produced by deployed models. To provide a contribution in this scenario, this paper introduces SecureBreak, a safety-oriented dataset designed to support the development of AI-driven solutions for detecting harmful LLM outputs caused by residual weaknesses in security alignment. The dataset is highly reliable due to careful manual annotation, where labels are assigned conservatively to ensure safety. It performs well in detecting unsafe content across multiple risk categories. Tests with pre-trained LLMs show improved results after fine-tuning on SecureBreak. Overall, the dataset is useful both for post-generation safety filtering and for guiding further model alignment and security improvements.",
+      "authors": [
+        "Marco Arazzi",
+        "Vignesh Kumar Kembu",
+        "Antonino Nocera"
+      ],
+      "published": "2026-03-23T13:41:05Z",
+      "published_date": "2026-03-23 13:41:05+00:00",
+      "updated": "2026-03-23T13:41:05Z",
+      "categories": [
+        "cs.CR",
+        "cs.AI",
+        "cs.CL",
+        "cs.LG"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.21975v1",
+      "url": "http://arxiv.org/abs/2603.21975v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.6,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 0.8,
+        "recommendation": 9.07
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "LLM",
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "SecureBreak_--_A_dataset_towards_safe_and_secure_models"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.22186v1",
+      "title": "Enhancing Document-Level Machine Translation via Filtered Synthetic Corpora and Two-Stage LLM Adaptation",
+      "summary": "In Machine Translation, Large Language Models (LLMs) have generally underperformed compared to conventional encoder-decoder systems and thus see limited adoption. However, LLMs excel at modeling contextual information, making them a natural fit for document-level translation tasks where coherence across sentences is crucial. Despite this potential, document-level MT with LLMs faces two key challenges: (1) the scarcity of large-scale, high-quality document-level parallel data; and (2) the propensity of LLMs to introduce hallucinations and omissions during generation. To address these challenges, we propose a two-stage fine-tuning strategy leveraging LLM-augmented document-level data. First, we augment data by converting summarization data into document-level parallel data using a LLM, and then filter it using multiple metrics, leveraging sacreBLEU, COMET, and LaBSE-based cosine similarity-to improve data quality. Finally, we employ a two-stage fine-tuning strategy: first fine-tuning on the abundant sentence-level MT resources, and then on the filtered document-level corpus.",
+      "authors": [
+        "Ireh Kim",
+        "Tesia Sker",
+        "Chanwoo Kim"
+      ],
+      "published": "2026-03-23T16:48:22Z",
+      "published_date": "2026-03-23 16:48:22+00:00",
+      "updated": "2026-03-23T16:48:22Z",
+      "categories": [
+        "cs.CL",
+        "cs.AI"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.22186v1",
+      "url": "http://arxiv.org/abs/2603.22186v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.4,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 1.5,
+        "recommendation": 9.03
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "LLM",
+        "hallucination",
+        "RAG",
+        "cs.CL",
+        "cs.AI"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "Enhancing_Document-Level_Machine_Translation_via_Filtered_Synthetic_Corpora_and_Two-Stage_LLM_Adaptation"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.21728v1",
+      "title": "EvoIdeator: Evolving Scientific Ideas through Checklist-Grounded Reinforcement Learning",
+      "summary": "Scientific idea generation is a cornerstone of autonomous knowledge discovery, yet the iterative evolution required to transform initial concepts into high-quality research proposals remains a formidable challenge for Large Language Models (LLMs). Existing Reinforcement Learning (RL) paradigms often rely on rubric-based scalar rewards that provide global quality scores but lack actionable granularity. Conversely, language-based refinement methods are typically confined to inference-time prompting, targeting models that are not explicitly optimized to internalize such critiques. To bridge this gap, we propose \\textbf{EvoIdeator}, a framework that facilitates the evolution of scientific ideas by aligning the RL training objective with \\textbf{checklist-grounded feedback}. EvoIdeator leverages a structured judge model to generate two synergistic signals: (1) \\emph{lexicographic rewards} for multi-dimensional optimization, and (2) \\emph{fine-grained language feedback} that offers span-level critiques regarding grounding, feasibility, and methodological rigor. By integrating these signals into the RL loop, we condition the policy to systematically utilize precise feedback during both optimization and inference. Extensive experiments demonstrate that EvoIdeator, built on Qwen3-4B, significantly outperforms much larger frontier models across key scientific metrics. Crucially, the learned policy exhibits strong generalization to diverse external feedback sources without further fine-tuning, offering a scalable and rigorous path toward self-refining autonomous ideation.",
+      "authors": [
+        "Andreas Sauter",
+        "Yuyue Zhao",
+        "Jacopo Urbani",
+        "Wenxiang Hu",
+        "Zaiqiao Meng",
+        "Lun Zhou",
+        "Xiaohui Yan",
+        "Yougang Lyu"
+      ],
+      "published": "2026-03-23T09:15:26Z",
+      "published_date": "2026-03-23 09:15:26+00:00",
+      "updated": "2026-03-23T09:15:26Z",
+      "categories": [
+        "cs.AI",
+        "cs.CL"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.21728v1",
+      "url": "http://arxiv.org/abs/2603.21728v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.2,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 2.0,
+        "recommendation": 8.93
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "LLM",
+        "grounding",
+        "RAG",
+        "cs.CL",
+        "cs.AI"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "EvoIdeator_Evolving_Scientific_Ideas_through_Checklist-Grounded_Reinforcement_Learning"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.22016v1",
+      "title": "ROM: Real-time Overthinking Mitigation via Streaming Detection and Intervention",
+      "summary": "Large Reasoning Models (LRMs) achieve strong accuracy on challenging tasks by generating long Chain-of-Thought traces, but suffer from overthinking. Even after reaching the correct answer, they continue generating redundant reasoning steps. This behavior increases latency and compute cost and can also lead to answer drift. Existing mitigation methods either require training-heavy backbone modification or rely on hand-crafted heuristics that do not truly capture overthinking patterns. We propose ROM, the first method that formulates overthinking mitigation as a streaming prediction-and-control problem. ROM attaches a lightweight detection head to the late-layer hidden states of a frozen large language model backbone. It monitors tokens in real time and triggers an early transition to the final answer once overthinking is detected. We also introduce token-level supervision based on solution correctness boundaries and a data augmentation strategy that reduces distilled-data bias. Across seven benchmarks, ROM achieves the highest accuracy (93.51%), the shortest responses (1,159 tokens), and the best response efficiency. Compared with the vanilla baseline, it reduces response length by 47.2% and improves efficiency by 121%. These results show that streaming detection is a promising approach to real-time overthinking mitigation.",
+      "authors": [
+        "Xinyan Wang",
+        "Xiaogeng Liu",
+        "Chaowei Xiao"
+      ],
+      "published": "2026-03-23T14:26:57Z",
+      "published_date": "2026-03-23 14:26:57+00:00",
+      "updated": "2026-03-23T14:26:57Z",
+      "categories": [
+        "cs.LG",
+        "cs.AI",
+        "cs.CL"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.22016v1",
+      "url": "http://arxiv.org/abs/2603.22016v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.3,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 1.5,
+        "recommendation": 8.9
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "ROM_Real-time_Overthinking_Mitigation_via_Streaming_Detection_and_Intervention"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.22286v1",
+      "title": "WorldCache: Content-Aware Caching for Accelerated Video World Models",
+      "summary": "Diffusion Transformers (DiTs) power high-fidelity video world models but remain computationally expensive due to sequential denoising and costly spatio-temporal attention. Training-free feature caching accelerates inference by reusing intermediate activations across denoising steps; however, existing methods largely rely on a Zero-Order Hold assumption i.e., reusing cached features as static snapshots when global drift is small. This often leads to ghosting artifacts, blur, and motion inconsistencies in dynamic scenes. We propose \\textbf{WorldCache}, a Perception-Constrained Dynamical Caching framework that improves both when and how to reuse features. WorldCache introduces motion-adaptive thresholds, saliency-weighted drift estimation, optimal approximation via blending and warping, and phase-aware threshold scheduling across diffusion steps. Our cohesive approach enables adaptive, motion-consistent feature reuse without retraining. On Cosmos-Predict2.5-2B evaluated on PAI-Bench, WorldCache achieves \\textbf{2.3$\\times$} inference speedup while preserving \\textbf{99.4\\%} of baseline quality, substantially outperforming prior training-free caching approaches. Our code can be accessed on \\href{https://umair1221.github.io/World-Cache/}{World-Cache}.",
+      "authors": [
+        "Umair Nawaz",
+        "Ahmed Heakl",
+        "Ufaq Khan",
+        "Abdelrahman Shaker",
+        "Salman Khan",
+        "Fahad Shahbaz Khan"
+      ],
+      "published": "2026-03-23T17:59:54Z",
+      "published_date": "2026-03-23 17:59:54+00:00",
+      "updated": "2026-03-23T17:59:54Z",
+      "categories": [
+        "cs.CV",
+        "cs.AI",
+        "cs.CL",
+        "cs.LG"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.22286v1",
+      "url": "http://arxiv.org/abs/2603.22286v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.0,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 2.0,
+        "recommendation": 8.67
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "cs.CL",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "WorldCache_Content-Aware_Caching_for_Accelerated_Video_World_Models"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.21725v1",
+      "title": "CurvZO: Adaptive Curvature-Guided Sparse Zeroth-Order Optimization for Efficient LLM Fine-Tuning",
+      "summary": "Fine-tuning large language models (LLMs) with backpropagation achieves high performance but incurs substantial memory overhead, limiting scalability on resource-constrained hardware. Zeroth-order (ZO) optimization provides a memory-efficient alternative by relying solely on forward passes, yet it typically suffers from slow or unstable convergence due to high-variance gradient estimates. Sparse ZO updates partially address this issue by perturbing only a subset of parameters, but their effectiveness hinges on selecting informative parameters, which is challenging in ZO optimization because each query yields only scalar feedback. We propose \\textbf{Adaptive Curvature-Guided Sparse Zeroth-Order Optimization (CurvZO)}, which tracks curvature signals online from scalar ZO feedback and leverages these signals to construct a parameter-wise sampling distribution for selecting coordinates at each update, reducing the variance of the sparse ZO gradient estimator. Moreover, CurvZO dynamically adapts the perturbation budget to the evolving curvature signal distribution, yielding sparse ZO updates that remain both focused and sufficiently exploratory. Extensive experiments on OPT and Llama across diverse NLP tasks show that CurvZO consistently improves fine-tuning performance and reduces training time over ZO baselines. It improves accuracy by up to 4.4 points and achieves up to a $2\\times$ speedup, while preserving memory efficiency.",
+      "authors": [
+        "Shuo Wang",
+        "Ziyu Chen",
+        "Ming Tang"
+      ],
+      "published": "2026-03-23T09:13:45Z",
+      "published_date": "2026-03-23 09:13:45+00:00",
+      "updated": "2026-03-23T09:13:45Z",
+      "categories": [
+        "cs.AI",
+        "cs.LG"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.21725v1",
+      "url": "http://arxiv.org/abs/2603.21725v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 3.1,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 1.1,
+        "recommendation": 8.5
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "LLM",
+        "RAG",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "CurvZO_Adaptive_Curvature-Guided_Sparse_Zeroth-Order_Optimization_for_Efficient_LLM_Fine-Tuning"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.21877v1",
+      "title": "P^2O: Joint Policy and Prompt Optimization",
+      "summary": "Reinforcement Learning with Verifiable Rewards (RLVR) has emerged as a powerful paradigm for enhancing the reasoning capabilities of Large Language Models (LLMs). However, vanilla RLVR suffers from inefficient exploration, particularly when confronting \"hard samples\" that yield nearzero success rates. In such scenarios, the reliance on sparse outcome rewards typically results in zero-advantage estimates, effectively starving the model of supervision signals despite the high informational value of these instances. To address this, we propose P^2O, a novel framework that synergizes Prompt Optimization with Policy Optimization. P^2O identifies hard samples during training iterations and leverages the GeneticPareto (GEPA) prompt optimization algorithm to evolve prompt templates that guide the model toward discovering successful trajectories. Crucially, unlike traditional prompt engineering methods that rely on input augmentation, P^2O distills the reasoning gains induced by these optimized prompts directly into the model parameters. This mechanism provides denser positive supervision signals for hard samples and accelerates convergence. Extensive experiments demonstrate that P^2O not only achieves superior performance on in-distribution datasets but also exhibits strong generalization, yielding substantial improvements on out-of-distribution benchmarks (+4.7% avg.).",
+      "authors": [
+        "Xinyu Lu",
+        "Kaiqi Zhang",
+        "Jinglin Yang",
+        "Boxi Cao",
+        "Yaojie Lu",
+        "Hongyu Lin",
+        "Min He",
+        "Xianpei Han",
+        "Le Sun"
+      ],
+      "published": "2026-03-23T12:08:47Z",
+      "published_date": "2026-03-23 12:08:47+00:00",
+      "updated": "2026-03-23T12:08:47Z",
+      "categories": [
+        "cs.LG",
+        "cs.AI"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.21877v1",
+      "url": "http://arxiv.org/abs/2603.21877v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 2.9,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 1.6,
+        "recommendation": 8.4
+      },
+      "matched_domain": "LLM",
+      "matched_keywords": [
+        "large language model",
+        "LLM",
+        "RAG",
+        "cs.AI",
+        "cs.LG"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "P^2O_Joint_Policy_and_Prompt_Optimization"
+    },
+    {
+      "id": "http://arxiv.org/abs/2603.21840v1",
+      "title": "Select, Label, Evaluate: Active Testing in NLP",
+      "summary": "Human annotation cost and time remain significant bottlenecks in Natural Language Processing (NLP), with test data annotation being particularly expensive due to the stringent requirement for low-error and high-quality labels necessary for reliable model evaluation. Traditional approaches require annotating entire test sets, leading to substantial resource requirements. Active Testing is a framework that selects the most informative test samples for annotation. Given a labeling budget, it aims to choose the subset that best estimates model performance while minimizing cost and human effort. In this work, we formalize Active Testing in NLP and we conduct an extensive benchmarking of existing approaches across 18 datasets and 4 embedding strategies spanning 4 different NLP tasks. The experiments show annotation reductions of up to 95%, with performance estimation accuracy difference from the full test set within 1%. Our analysis reveals variations in method effectiveness across different data characteristics and task types, with no single approach emerging as universally superior. Lastly, to address the limitation of requiring a predefined annotation budget in existing sample selection strategies, we introduce an adaptive stopping criterion that automatically determines the optimal number of samples.",
+      "authors": [
+        "Antonio Purificato",
+        "Maria Sofia Bucarelli",
+        "Andrea Bacciu",
+        "Amin Mantrach",
+        "Fabrizio Silvestri"
+      ],
+      "published": "2026-03-23T11:28:57Z",
+      "published_date": "2026-03-23 11:28:57+00:00",
+      "updated": "2026-03-23T11:28:57Z",
+      "categories": [
+        "cs.CL",
+        "cs.AI"
+      ],
+      "pdf_url": "https://arxiv.org/pdf/2603.21840v1",
+      "url": "http://arxiv.org/abs/2603.21840v1",
+      "source": "arxiv",
+      "scores": {
+        "relevance": 2.8,
+        "recency": 3.0,
+        "popularity": 2.0,
+        "quality": 1.6,
+        "recommendation": 8.27
+      },
+      "matched_domain": "NLP",
+      "matched_keywords": [
+        "natural language processing",
+        "NLP",
+        "cs.CL",
+        "cs.AI"
+      ],
+      "is_hot_paper": false,
+      "note_filename": "Select,_Label,_Evaluate_Active_Testing_in_NLP"
+    }
+  ]
+}

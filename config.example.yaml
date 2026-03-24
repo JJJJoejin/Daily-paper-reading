@@ -1,0 +1,78 @@
+# evil-read-arxiv configuration file example
+# Copy this file as config.yaml and modify the paths to your own
+
+# Language setting (zh/en)
+# - "zh": Chinese reports
+# - "en": English reports (default)
+language: "en"
+
+# Obsidian Vault path (required)
+vault_path: "/path/to/your/obsidian/vault"
+
+# Papers directory path relative to vault (optional, defaults to 20_Research/Papers)
+papers_dir: "20_Research/Papers"
+
+# Semantic Scholar API Key (optional, helps reduce 429 rate limiting)
+# Free application: https://www.semanticscholar.org/product/api#api-key
+# semantic_scholar_api_key: "your-api-key-here"
+
+# Research interest configuration (required)
+research_domains:
+  # Research domain names can be customized
+  "LLM":
+    # Keyword list, used for searching and matching papers
+    keywords:
+      - "pre-training"
+      - "foundation model"
+      - "model architecture"
+      - "large language model"
+      - "LLM"
+      - "transformer"
+    # arXiv categories (optional)
+    arxiv_categories:
+      - "cs.AI"
+      - "cs.LG"
+      - "cs.CL"
+    # Priority (optional, 1-10, higher value means higher priority)
+    priority: 5
+
+  "Multimodal":
+    keywords:
+      - "vision-language"
+      - "multimodal"
+      - "image-text"
+      - "visual"
+      - "cross-modal"
+    arxiv_categories:
+      - "cs.CV"
+      - "cs.MM"
+      - "cs.CL"
+    priority: 4
+
+  "Agent":
+    keywords:
+      - "agent"
+      - "multi-agent"
+      - "orchestration"
+      - "autonomous"
+      - "planning"
+    arxiv_categories:
+      - "cs.AI"
+      - "cs.MA"
+      - "cs.RO"
+    priority: 4
+
+# Excluded keywords (optional)
+excluded_keywords:
+  - "3D"
+  - "review"
+  - "workshop"
+  - "survey"
+
+# Custom common word filter list (optional)
+# These words will be skipped during automatic keyword linking and will not be replaced with wikilinks
+# Common English function words and general ML terms are already included by default; add extra filter words here
+# extra_common_words:
+#   - "dataset"
+#   - "results"
+#   - "performance"
