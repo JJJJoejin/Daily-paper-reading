@@ -524,6 +524,27 @@ When users type "start my day", execute the following steps:
 - Temporary XML and JSON files generated during search can be cleaned up
 - After recommendation notes are saved to the vault, temporary files are no longer needed
 
+## MCP Integration (Optional Enhancement)
+
+If the `paper-db` MCP server is available, the workflow can use MCP tools for persistent storage and smarter recommendations:
+
+**Enhanced workflow with MCP**:
+1. `sync_vault_notes` — Scan vault and match notes to DB entries
+2. `search_arxiv(days=30, max_results=200)` — Search arXiv and store in DB
+3. `search_semantic_scholar(days=365, top_k=20)` — Search S2 hot papers and store in DB
+4. `score_papers()` — Re-score all papers against current research interests
+5. `get_recommendations(limit=10)` — Get top 10 unanalyzed papers
+6. Generate recommendation notes (same format as above)
+7. `record_event(paper_id=X, event_type="recommended", recommendation_rank=N)` — Log recommendations
+
+**Benefits of MCP integration**:
+- Papers persist across sessions (no re-searching)
+- Deduplication across arXiv and S2 sources
+- History tracking (what was recommended when)
+- Structured queries for follow-up searches
+
+The MCP tools complement but do not replace the existing Python scripts — the scripts handle direct API calls, while MCP tools handle storage and retrieval.
+
 ## Dependencies
 
 - Python 3.x (for running search and filtering scripts)
@@ -532,6 +553,7 @@ When users type "start my day", execute the following steps:
 - `20_Research/Papers/` directory (for scanning existing notes and saving detailed reports)
 - `extract-paper-images` skill (for extracting paper images)
 - `paper-analyze` skill (for generating detailed reports)
+- `paper-db` MCP server (optional, for persistent paper database)
 
 ## Script Documentation
 

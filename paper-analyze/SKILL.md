@@ -896,6 +896,31 @@ This paper belongs to [technical lineage], mainly focusing on [sub-direction].
 - `related`: General conceptual relationship
 ```
 
+## MCP Integration (After Analysis)
+
+If the `paper-db` MCP server is available, update the database after completing analysis:
+
+```
+# Mark paper as analyzed with note path
+upsert_paper(
+  title="Paper Title",
+  arxiv_id="2603.12345",
+  domain="LLM",
+  has_note=true,
+  note_path="20_Research/Papers/LLM/Paper_Title.md",
+  source="arxiv"
+)
+
+# Log the analysis event
+record_event(paper_id=<id>, event_type="analyzed")
+
+# Record relationships to related papers
+add_citation(source_paper_id=<this_paper_id>, target_paper_id=<related_id>, relationship_type="extends")
+add_citation(source_paper_id=<this_paper_id>, target_paper_id=<related_id>, relationship_type="cites")
+```
+
+This keeps the paper database in sync with the vault and enables structured queries for related work.
+
 ## Error Handling
 
 - **Paper not found**: Check ID format, suggest searching

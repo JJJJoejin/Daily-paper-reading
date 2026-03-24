@@ -369,6 +369,20 @@ When users type `/conf-papers`, execute the following steps:
 - `existing_notes_index.json` — Note index
 - After recommendation notes are saved to the vault, temporary files can be cleaned up
 
+## MCP Integration (Optional Enhancement)
+
+If the `paper-db` MCP server is available, the workflow can use MCP tools:
+
+**Enhanced workflow with MCP**:
+1. `sync_vault_notes()` — Match existing notes to DB
+2. `search_conference_papers(venues="ICLR,CVPR", year=2025)` — Search DBLP, enrich with S2, store in DB
+3. `score_papers()` — Score all papers
+4. `get_recommendations(limit=10)` — Get top recommendations
+5. Generate recommendation notes (same format as above)
+6. `record_event(paper_id=X, event_type="recommended")` — Log recommendations
+
+**Benefits**: Papers persist across sessions, deduplication with arXiv papers, structured queries.
+
 ## Dependencies
 
 - Python 3.x
@@ -377,3 +391,4 @@ When users type `/conf-papers`, execute the following steps:
 - `start-my-day` skill (reuses scan_existing_notes.py, link_keywords.py, search_arxiv.py scoring functions)
 - `extract-paper-images` skill (for extracting paper images, only for papers with arXiv ID)
 - `paper-analyze` skill (for generating detailed reports, only for papers with arXiv ID)
+- `paper-db` MCP server (optional, for persistent paper database)
