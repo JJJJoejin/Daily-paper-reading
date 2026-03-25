@@ -227,7 +227,7 @@ def main():
     if not domain:
         domain = 'Other'
 
-    note_dir = os.path.join(papers_dir, domain)
+    note_dir = os.path.join(papers_dir, date, domain)
     os.makedirs(note_dir, exist_ok=True)
 
     note_path = os.path.join(note_dir, f"{paper_title_safe}.md")

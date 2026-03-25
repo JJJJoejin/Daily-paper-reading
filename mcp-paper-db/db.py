@@ -23,7 +23,7 @@ class PaperDatabase:
     @property
     def conn(self) -> sqlite3.Connection:
         if self._conn is None:
-            self._conn = sqlite3.connect(str(self.db_path))
+            self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA foreign_keys=ON")
@@ -246,12 +246,12 @@ class PaperDatabase:
     def get_reading_history(
         self, event_type: Optional[str] = None, days: int = 30, limit: int = 50
     ) -> list[dict]:
-        conditions = ["rh.event_date >= date('now', ?"]
+        conditions = ["rh.event_date >= date('now', ?)"]
         params: list = [f"-{days} days"]
         if event_type:
             conditions.append("rh.event_type = ?")
             params.append(event_type)
-        where = " AND ".join(conditions) + ")"
+        where = " AND ".join(conditions)
         params.append(limit)
         rows = self.conn.execute(
             f"SELECT rh.*, p.title, p.arxiv_id FROM reading_history rh "
