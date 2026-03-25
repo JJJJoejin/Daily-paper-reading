@@ -213,10 +213,6 @@ A: Set `LLM_API_KEY` environment variable with your DeepSeek API key. Without it
 ### Q: Port already in use?
 A: Run `pkill -f "streamlit run app.py"` then start again.
 
-## Contributing
-
-Issues and Pull Requests are welcome!
-
 ## License
 
 MIT License
