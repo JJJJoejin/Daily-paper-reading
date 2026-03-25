@@ -4,254 +4,174 @@
 
 ## Introduction
 
-This is a collection of Claude Code Skills for automating the workflow of searching, recommending, analyzing, and organizing research papers. By calling the arXiv and Semantic Scholar APIs, it recommends high-quality papers for you every day and automatically generates detailed notes and knowledge graphs.
+This is a collection of tools for automating the workflow of searching, recommending, analyzing, and organizing research papers. It includes a **Streamlit web UI**, **Claude Code Skills**, and an **MCP paper database** for persistent storage. By calling the arXiv, Semantic Scholar, and DBLP APIs, it recommends high-quality papers every day and generates detailed notes and knowledge graphs in your Obsidian vault.
 
 ## Changelog
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-03-13 | v1.1 | Added `conf-papers` skill: supports searching top conference papers from CVPR/ICCV/ECCV/ICLR/AAAI/NeurIPS/ICML, powered by DBLP + Semantic Scholar dual data sources, independent config file, three-dimensional scoring |
-| 2026-03-01 | v1.0 | Initial release: start-my-day daily recommendations, paper-analyze paper analysis, extract-paper-images image extraction, paper-search paper search |
+| 2026-03-25 | v2.0 | Added Streamlit UI (`app.py`), MCP paper database with SQLite, DeepSeek LLM-powered paper analysis, dual-mode operation (with/without MCP), date-based vault structure |
+| 2026-03-13 | v1.1 | Added `conf-papers` skill: supports searching top conference papers from CVPR/ICCV/ECCV/ICLR/AAAI/NeurIPS/ICML |
+| 2026-03-01 | v1.0 | Initial release: start-my-day, paper-analyze, extract-paper-images, paper-search |
 
 ## Features
 
-### 1. start-my-day - Daily Paper Recommendations
-- Searches arXiv for papers from the last month
-- Searches Semantic Scholar for high-impact papers from the past year
-- Comprehensive scoring based on four dimensions: relevance, recency, popularity, and quality
-- Automatically generates a daily overview and recommendation list
-- Top 3 papers automatically get detailed analysis and image extraction
-- Automatically links keywords to existing notes
+### Streamlit Web UI (`app.py`)
 
-### 2. paper-analyze - In-Depth Paper Analysis
-- Deep analysis of individual papers
-- Generates structured notes including:
-  - Abstract translation and key point extraction
-  - Research background and motivation
-  - Method overview and architecture
-  - Experimental results analysis
-  - Research value assessment
-  - Strengths and limitations analysis
-  - Comparison with related papers
-- Automatically extracts paper images and inserts them into notes
-- Updates knowledge graph
+A browser-based interface at `http://localhost:8502` with 8 pages:
 
-### 3. extract-paper-images - Paper Image Extraction
-- Prioritizes extracting high-quality images from arXiv source packages
-- Supports extracting images from PDF as a fallback
-- Automatically generates an image index
-- Saves to the images subdirectory of the notes directory
+| Page | Description |
+|------|-------------|
+| **Home** | Dashboard with research domains, vault stats, DB paper counts |
+| **Start My Day** | Daily paper recommendations from arXiv + Semantic Scholar |
+| **Analyze Paper** | Deep analysis with LLM-powered note generation (DeepSeek) |
+| **Conference Papers** | Search CVPR/ICLR/NeurIPS etc. via DBLP |
+| **Journal Search** | Search journal papers via OpenAlex |
+| **Paper Database** | Browse/search the SQLite database (MCP mode only) |
+| **Search** | Search paper notes in DB + vault markdown files |
+| **Settings** | Configure vault path, DB maintenance, sync/rescore |
 
-### 4. paper-search - Paper Note Search
-- Searches existing notes for papers
-- Supports search by title, author, keywords, and domain
-- Results sorted by relevance score
+### MCP Paper Database (`mcp-paper-db/`)
 
-### 5. conf-papers - Top Conference Paper Search & Recommendations
-- Searches top conference papers from CVPR/ICCV/ECCV/ICLR/AAAI/NeurIPS/ICML
-- Uses DBLP API to get paper lists + Semantic Scholar to supplement citations and abstracts
-- Independent config file `conf-papers.yaml` (keywords, exclusions, default year/conference)
-- Two-stage filtering: title keyword lightweight screening -> S2 supplementation -> three-dimensional scoring (relevance 40% + popularity 40% + quality 20%)
-- Top 3 papers automatically get detailed analysis (requires arXiv ID)
+SQLite-backed persistent storage with 16 MCP tools:
 
-## Installation
+- **Search**: `search_papers`, `search_arxiv`, `search_semantic_scholar`, `search_conference_papers`, `enrich_papers`
+- **Scoring**: `score_papers`, `get_recommendations`
+- **Management**: `get_paper`, `upsert_paper`, `record_event`, `sync_vault_notes`, `add_citation`
+- **Analytics**: `get_stats`, `get_reading_history`, `find_duplicates`, `ping`
+
+### LLM-Powered Analysis
+
+When `LLM_API_KEY` is set, the Analyze Paper page sends the paper's LaTeX source to DeepSeek and generates a fully filled analysis note (not just a template). Falls back to blank template if the key is not set.
+
+### Claude Code Skills
+
+All original skills still work via the CLI:
+
+1. **start-my-day** — Daily paper recommendations
+2. **paper-analyze** — Deep analysis of individual papers
+3. **extract-paper-images** — Extract images from arXiv source packages
+4. **paper-search** — Search existing paper notes
+5. **conf-papers** — Top conference paper search
+
+## Quick Start
 
 ### Prerequisites
 
-1. **Claude Code CLI** - Must be installed and configured
-2. **Python 3.8+** - Required for running search and analysis scripts
-3. **Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
+- **Python 3.8+**
+- **Obsidian** vault for storing notes
 
-### Installation Steps
-
-1. Clone or copy this repository to your Claude Code skills directory:
-   ```bash
-   # Windows PowerShell
-   Copy-Item -Recurse evil-read-arxiv\start-my-day $env:USERPROFILE\.claude\skills\
-   Copy-Item -Recurse evil-read-arxiv\paper-analyze $env:USERPROFILE\.claude\skills\
-   Copy-Item -Recurse evil-read-arxiv\extract-paper-images $env:USERPROFILE\.claude\skills\
-   Copy-Item -Recurse evil-read-arxiv\paper-search $env:USERPROFILE\.claude\skills\
-
-   # macOS/Linux
-   cp -r evil-read-arxiv/start-my-day ~/.claude/skills/
-   cp -r evil-read-arxiv/paper-analyze ~/.claude/skills/
-   cp -r evil-read-arxiv/extract-paper-images ~/.claude/skills/
-   cp -r evil-read-arxiv/paper-search ~/.claude/skills/
-   ```
-
-2. Configure environment variables and paths (see the "Configuration" section below)
-
-3. Restart Claude Code CLI
-
-## Configuration
-
-> **Strongly recommended**: Read [QUICKSTART.md](QUICKSTART.md) first for a quick setup.
-
-### Step 1: Set Environment Variables (Recommended)
-
-All scripts read the Obsidian Vault path from the `OBSIDIAN_VAULT_PATH` environment variable. This is the simplest configuration method:
+### Installation
 
 ```bash
-# Windows PowerShell (temporary)
-$env:OBSIDIAN_VAULT_PATH = "C:/Users/YourName/Documents/Obsidian Vault"
+git clone https://github.com/JJJJoejin/Daily-paper-reading.git
+cd Daily-paper-reading
 
-# Windows PowerShell (permanent)
-[System.Environment]::SetEnvironmentVariable("OBSIDIAN_VAULT_PATH", "C:/Users/YourName/Documents/Obsidian Vault", "User")
+python -m venv .venv
+source .venv/bin/activate    # macOS/Linux
+# .venv\Scripts\activate     # Windows
 
-# macOS/Linux (add to ~/.bashrc or ~/.zshrc)
-export OBSIDIAN_VAULT_PATH="/Users/yourname/Documents/Obsidian Vault"
+pip install -r requirements.txt
 ```
 
-After setting the environment variable, **there is no need to modify any paths in the scripts**.
-
-### Step 2: Create Configuration File
-
-Copy `config.example.yaml` and modify it:
+### Configuration
 
 ```bash
 cp config.example.yaml config.yaml
+# Edit config.yaml with your research interests
 ```
 
-Edit `config.yaml` and modify the keywords according to your research interests:
+### Running the Streamlit UI
 
-```yaml
-vault_path: "/path/to/your/obsidian/vault"
-
-research_domains:
-  "YourResearchDomain1":
-    keywords:
-      - "keyword1"
-      - "keyword2"
-    arxiv_categories:
-      - "cs.AI"
-      - "cs.LG"
-```
-
-Then copy the modified `config.yaml` into your Vault:
+**Without MCP** (basic mode, no persistent DB):
 ```bash
-cp config.yaml "$OBSIDIAN_VAULT_PATH/99_System/Config/research_interests.yaml"
+OBSIDIAN_VAULT_PATH="/path/to/your/vault" \
+DISABLE_MCP=1 \
+streamlit run app.py --server.port 8501 --server.headless true
 ```
 
-### Step 3 (Optional): Override Paths via CLI Arguments
-
-If you prefer not to set environment variables, you can specify paths via arguments each time you call a script:
-
+**With MCP** (persistent database):
 ```bash
-python scripts/search_arxiv.py --config "/your/path/research_interests.yaml"
-python scripts/scan_existing_notes.py --vault "/your/obsidian/vault"
-python scripts/generate_note.py --vault "/your/obsidian/vault" --paper-id "2402.12345" --title "Paper Title" --authors "Author" --domain "LLM"
-python scripts/update_graph.py --vault "/your/obsidian/vault" --paper-id "2402.12345" --title "Paper Title" --domain "LLM"
+OBSIDIAN_VAULT_PATH="/path/to/your/vault" \
+streamlit run app.py --server.port 8502 --server.headless true
 ```
 
-### Path Format Notes
+**With MCP + LLM Analysis** (full features):
+```bash
+OBSIDIAN_VAULT_PATH="/path/to/your/vault" \
+LLM_API_KEY="your-deepseek-api-key" \
+streamlit run app.py --server.port 8502 --server.headless true
+```
 
-- **Windows**: You can use forward slashes `/` or double backslashes `\\`
-  - Correct: `C:/Users/Name/Documents/Vault`
-  - Correct: `C:\\Users\\Name\\Documents\\Vault`
-  - Wrong: `C:\Users\Name\Documents\Vault` (single backslashes need escaping in Python strings)
+### Environment Variables
 
-- **macOS/Linux**: Use forward slashes `/`
-  - Correct: `/Users/name/Documents/Vault`
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OBSIDIAN_VAULT_PATH` | Yes | Path to your Obsidian vault |
+| `DISABLE_MCP` | No | Set to `1` to disable MCP database |
+| `LLM_API_KEY` | No | DeepSeek API key for LLM-powered analysis |
+| `S2_API_KEY` | No | Semantic Scholar API key (avoids rate limits) |
 
-### Obsidian Directory Structure Requirements
-
-Your Obsidian Vault should contain the following directory structure:
+## Obsidian Vault Structure
 
 ```
 YourVault/
-├── 10_Daily/                    # Daily recommendation notes (auto-created)
+├── 10_Daily/                          # Daily recommendation notes
 │   └── YYYY-MM-DD-paper-recommendations.md
 ├── 20_Research/
-│   └── Papers/                  # Detailed paper notes directory
-│       ├── LLM/
-│       │   └── PaperTitle.md
-│       │       └── images/      # Paper images
-│       ├── Multimodal/
-│       └── Agent/
+│   ├── Papers/                        # Paper analysis notes
+│   │   └── YYYY-MM-DD/               # Date-based organization
+│   │       └── LLM/
+│   │           ├── Paper_Title.md     # Analysis note
+│   │           └── Paper_Title/
+│   │               └── images/        # Extracted figures
+│   └── PaperGraph/
+│       └── graph_data.json            # Knowledge graph
 └── 99_System/
     └── Config/
-        └── research_interests.yaml  # Research interests config (copy config.yaml here)
+        └── research_interests.yaml    # Research interests config
 ```
 
-## Usage
-
-### Start Daily Paper Recommendations
-
-Open a terminal in your Obsidian Vault directory and type:
-
-```bash
-start my day
-```
-
-This will:
-1. Search for high-quality papers from the last month and past year
-2. Filter and score based on your research interests
-3. Generate a daily recommendation note (saved to `10_Daily/`)
-4. Automatically generate detailed analysis for the top 3 papers
-5. Extract paper images and insert them into notes
-6. Automatically link keywords to existing notes
-
-### Analyze a Single Paper
-
-If you want to read a paper in depth:
-
-```bash
-paper-analyze 2602.12345
-# Or use the paper title
-paper-analyze "Paper Title"
-```
-
-This will:
-1. Download the paper PDF
-2. Extract images
-3. Generate a detailed analysis note
-4. Update the knowledge graph
-
-### Extract Paper Images
-
-```bash
-extract-paper-images 2602.12345
-```
-
-### Search Existing Papers
-
-```bash
-paper-search "keywords"
-```
-
-## Directory Structure
+## Project Structure
 
 ```
 evil-read-arxiv/
-├── README.md                 # This file
-├── QUICKSTART.md             # Quick start guide
-├── config.example.yaml       # Config template (copy and modify)
+├── app.py                    # Streamlit web UI
+├── config.example.yaml       # Config template
 ├── requirements.txt          # Python dependencies
+├── mcp-paper-db/             # MCP paper database server
+│   ├── server.py             # MCP entry point (stdio transport)
+│   ├── db.py                 # SQLite schema, migrations, CRUD
+│   ├── models.py             # Paper, Author, Citation dataclasses
+│   ├── config.py             # Config loading
+│   ├── scoring_engine.py     # Paper scoring (relevance, recency, etc.)
+│   ├── tools/                # MCP tool implementations
+│   │   ├── search.py         # search_papers, search_arxiv, etc.
+│   │   ├── scoring.py        # score_papers, get_recommendations
+│   │   ├── management.py     # upsert_paper, sync_vault_notes, etc.
+│   │   └── analytics.py      # get_stats, get_reading_history
+│   ├── clients/              # External API clients
+│   │   ├── arxiv_client.py   # arXiv API
+│   │   ├── s2_client.py      # Semantic Scholar API
+│   │   └── dblp_client.py    # DBLP API
+│   └── migrations/
+│       └── 001_initial.sql
 ├── start-my-day/             # Daily recommendation skill
-│   ├── SKILL.md              # Skill definition file
+│   ├── SKILL.md
 │   └── scripts/
-│       ├── search_arxiv.py   # arXiv/Semantic Scholar search script
-│       ├── scan_existing_notes.py  # Scan existing notes
-│       └── link_keywords.py  # Keyword auto-linking script
 ├── paper-analyze/            # Paper analysis skill
 │   ├── SKILL.md
 │   └── scripts/
-│       ├── generate_note.py  # Generate note template
-│       └── update_graph.py   # Update knowledge graph
 ├── extract-paper-images/     # Image extraction skill
 │   ├── SKILL.md
 │   └── scripts/
-│       └── extract_images.py # Image extraction script
 ├── paper-search/             # Paper search skill
 │   └── SKILL.md
-└── conf-papers/              # Top conference paper search skill
-    ├── SKILL.md              # Skill definition file
-    ├── conf-papers.yaml      # Independent config (keywords, conferences, years)
+├── conf-papers/              # Conference paper search skill
+│   ├── SKILL.md
+│   └── scripts/
+└── journal-search/           # Journal search
     └── scripts/
-        └── search_conf_papers.py  # DBLP search + S2 supplement + scoring
 ```
 
 ## Scoring Mechanism
@@ -260,102 +180,42 @@ Paper recommendation scoring is based on four dimensions:
 
 | Dimension | Weight | Description |
 |-----------|--------|-------------|
-| Relevance | 40% | Degree of match with research interests |
-| Recency | 20% | Paper publication date |
+| Relevance | 40% | Match with research interests (keywords, categories) |
+| Recency | 20% | Publication date |
 | Popularity | 30% | Citation count / impact |
 | Quality | 10% | Method quality inferred from abstract |
 
-**Scoring Details**:
-- **Relevance**: Title keyword match (+0.5 each), abstract keyword match (+0.3 each), category match (+1.0)
-- **Recency**: Within 30 days (+3), 30-90 days (+2), 90-180 days (+1), over 180 days (0)
-- **Popularity**: High-impact citations > 100 (+3), 50-100 (+2), < 50 (+1)
-- **Quality**: Multi-dimensional metrics (strong innovation terms > weak innovation terms > method metrics > quantitative results > experimental metrics)
+## Dual-Mode Operation
 
-## Common arXiv Categories
+You can run two instances simultaneously:
 
-| Category Code | Name | Description |
-|---------------|------|-------------|
-| cs.AI | Artificial Intelligence | AI |
-| cs.LG | Learning | Machine Learning |
-| cs.CL | Computation and Language | Computational Linguistics / NLP |
-| cs.CV | Computer Vision | Computer Vision |
-| cs.MM | Multimedia | Multimedia |
-| cs.MA | Multiagent Systems | Multi-Agent Systems |
-| cs.RO | Robotics | Robotics |
+| Port | Mode | Features |
+|------|------|----------|
+| 8501 | No MCP | Script-based search, results not persisted, vault-only search |
+| 8502 | MCP | DB-backed search, persistent storage, recommendations accumulate over time |
+
+Both modes write the same Obsidian notes. The MCP version additionally stores everything in a SQLite database (`mcp-paper-db/papers.db`).
 
 ## FAQ
 
 ### Q: No search results?
-A: Check the following:
-1. Verify your network connection is working
-2. Check that the keywords in your config file are correct
-3. Try expanding the arXiv category scope
+A: Check network connection, verify keywords in config, try expanding arXiv categories.
+
+### Q: Semantic Scholar 429 rate limit?
+A: Get a free API key at https://www.semanticscholar.org/product/api and set `S2_API_KEY`, or check "Skip Semantic Scholar hot papers" in the UI.
 
 ### Q: Image extraction failed?
-A:
-1. Make sure PyMuPDF is installed: `pip install PyMuPDF`
-2. Check that the arXiv ID format is correct (e.g., 2602.12345)
+A: Make sure PyMuPDF is installed (`pip install PyMuPDF`) and the arXiv ID format is correct.
 
-### Q: Keyword auto-linking is inaccurate?
-A: You can edit the `COMMON_WORDS` set in `start-my-day/scripts/link_keywords.py` to add words you don't want to be auto-linked.
+### Q: LLM analysis not working?
+A: Set `LLM_API_KEY` environment variable with your DeepSeek API key. Without it, you get a blank template note instead.
 
-### Q: "Papers directory not found" error?
-A:
-1. Check that the `OBSIDIAN_VAULT_PATH` environment variable is set correctly
-2. Verify that the directory structure in your Obsidian Vault has been created correctly (20_Research/Papers/)
-
-### Q: "Vault path not specified" error?
-A: Set the `OBSIDIAN_VAULT_PATH` environment variable, or specify the path via `--vault` / `--config` arguments when calling scripts.
-
-## Advanced Configuration
-
-### Modify arXiv Search Categories
-
-Specify categories via the `--categories` argument when calling `search_arxiv.py`:
-
-```bash
-python scripts/search_arxiv.py --categories "cs.AI,cs.LG,cs.CL,cs.CV"
-```
-
-### Modify Daily Recommendation Count
-
-Specify the count via the `--top-n` argument when calling `search_arxiv.py`:
-
-```bash
-python scripts/search_arxiv.py --top-n 15
-```
-
-### Modify Scoring Weights
-
-Adjust the weights in the `calculate_recommendation_score` function in `start-my-day/scripts/search_arxiv.py`.
-
-## How It Works
-
-```
-User types "start my day"
-         |
-    1. Load research config
-    2. Scan existing notes to build index
-         |
-    3. Search arXiv (last 30 days)
-    4. Search Semantic Scholar (past year, high impact)
-         |
-    5. Merge results and deduplicate
-    6. Comprehensive scoring and sorting
-    7. Take top N papers
-         |
-    8. Generate daily recommendation note
-    9. Generate detailed analysis for top 3
-    10. Auto-link keywords
-```
+### Q: Port already in use?
+A: Run `pkill -f "streamlit run app.py"` then start again.
 
 ## Contributing
 
 Issues and Pull Requests are welcome!
-
-If you find this project helpful, please give it a Star to show your support!
-
-[![Star History Chart](https://api.star-history.com/svg?repos=juliye2025/evil-read-arxiv&type=Date)](https://star-history.com/#juliye2025/evil-read-arxiv&Date)
 
 ## License
 
@@ -363,7 +223,10 @@ MIT License
 
 ## Acknowledgments
 
-- [arXiv](https://arxiv.org/) - Open-access academic preprint platform
-- [Semantic Scholar](https://www.semanticscholar.org/) - AI-powered academic research platform
-- [Claude Code](https://claude.ai/claude-code) - AI-assisted code and writing tool
-- [Obsidian](https://obsidian.md/) - Powerful knowledge management tool
+- [arXiv](https://arxiv.org/) — Open-access academic preprint platform
+- [Semantic Scholar](https://www.semanticscholar.org/) — AI-powered academic research platform
+- [DBLP](https://dblp.org/) — Computer science bibliography
+- [DeepSeek](https://deepseek.com/) — LLM API for paper analysis
+- [Claude Code](https://claude.ai/claude-code) — AI-assisted development
+- [Obsidian](https://obsidian.md/) — Knowledge management tool
+- [Streamlit](https://streamlit.io/) — Web UI framework
