@@ -456,6 +456,9 @@ def page_start_my_day():
         conf_venues = st.text_input("Conference venues", value="CVPR,ICLR,NeurIPS,ICML,AAAI")
         conf_year = st.number_input("Conference year", value=2025, min_value=2020, max_value=2026)
 
+    # Auto-analyze
+    auto_analyze = st.number_input("Auto-analyze top N papers", value=3, min_value=0, max_value=10)
+
     # Choose search method
     use_mcp = HAS_MCP and st.checkbox("Use MCP database (persistent storage)", value=True)
 
@@ -468,6 +471,7 @@ def page_start_my_day():
                 conf_venues=conf_venues.split(",") if search_conf else [],
                 conf_year=conf_year if search_conf else 2025,
                 search_journal=search_journal, raw_config=raw_config,
+                auto_analyze=auto_analyze,
             )
         else:
             _search_with_scripts(target_date, categories, max_results, top_n, not search_s2, vault, raw_config)
@@ -506,6 +510,7 @@ def _search_with_mcp(
     target_date, categories, max_results, top_n, mcp_cfg,
     search_arxiv=True, search_s2=True, search_conf=False,
     conf_venues=None, conf_year=2025, search_journal=False, raw_config=None,
+    auto_analyze=3,
 ):
     """Run search using MCP tools (persistent DB)."""
     db = get_db()
@@ -644,6 +649,127 @@ def _search_with_mcp(
             mgmt_tools.record_event_impl(db, paper_id=r["id"], event_type="recommended", recommendation_rank=i)
         except Exception:
             pass
+
+    # Auto-analyze top 3 papers
+    vault = get_vault_path()
+    if vault and auto_analyze > 0:
+        analyzable = [p for p in papers if p.get("arxiv_id")][:auto_analyze]
+        if analyzable:
+            st.markdown("---")
+            st.markdown(f"### Auto-Analyzing Top {len(analyzable)} Papers")
+            for i, paper in enumerate(analyzable, 1):
+                arxiv_id = paper["arxiv_id"]
+                title = paper["title"]
+                domain = paper.get("domain") or paper.get("matched_domain") or "Other"
+                authors = paper.get("authors", [])
+                if isinstance(authors, list) and authors and isinstance(authors[0], dict):
+                    author_str = ", ".join(a.get("name", "") for a in authors[:5])
+                else:
+                    author_str = ", ".join(authors[:5]) if authors else ""
+                abstract = paper.get("abstract", "") or paper.get("summary", "")
+
+                with st.status(f"Analyzing {i}/{len(analyzable)}: {title[:60]}...", expanded=True) as astatus:
+                    try:
+                        _auto_analyze_single(
+                            arxiv_id, title, author_str, domain, abstract, vault, db
+                        )
+                        astatus.update(label=f"✅ {title[:50]}...", state="complete")
+                    except Exception as e:
+                        astatus.update(label=f"⚠️ Failed: {title[:50]}...", state="error")
+                        st.write(f"Error: {e}")
+
+
+def _auto_analyze_single(arxiv_id, title, author_str, domain, abstract, vault, db):
+    """Analyze a single paper: extract images, LLM analysis, write note."""
+    safe_title = re.sub(r'[ /\\:*?"<>|]+', '_', title).strip('_')
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    paper_folder_name = f"{today_str}_{safe_title}"
+    paper_folder = Path(vault) / "20_Research" / "Papers" / domain / paper_folder_name
+    images_dir = paper_folder / "images"
+    note_path = paper_folder / f"{paper_folder_name}.md"
+
+    # Skip if already analyzed
+    if note_path.exists() and note_path.stat().st_size > 500:
+        st.write(f"⏭️ Already analyzed, skipping")
+        return
+
+    # Extract images
+    st.write("🖼️ Extracting images...")
+    index_path = images_dir / "index.md"
+    stdout, stderr, rc = run_script(
+        PROJECT_DIR / "extract-paper-images" / "scripts" / "extract_images.py",
+        [arxiv_id, str(images_dir), str(index_path)],
+        cwd=str(PROJECT_DIR / "extract-paper-images"),
+    )
+    image_count = 0
+    if rc == 0:
+        image_paths = [line for line in stdout.strip().split("\n") if line.startswith("images/")]
+        image_count = len(image_paths)
+        st.write(f"✅ {image_count} images extracted")
+    else:
+        st.write("⚠️ Image extraction failed, continuing")
+
+    # Generate template note first (fallback)
+    run_script(
+        PROJECT_DIR / "paper-analyze" / "scripts" / "generate_note.py",
+        [
+            "--paper-id", arxiv_id,
+            "--title", title,
+            "--authors", author_str,
+            "--domain", domain,
+            "--vault", vault,
+            "--language", "en",
+        ],
+        cwd=str(PROJECT_DIR / "paper-analyze"),
+    )
+
+    # LLM analysis
+    if os.environ.get("LLM_API_KEY"):
+        st.write("🤖 Running LLM analysis...")
+        tex_content = fetch_tex_content(arxiv_id)
+        if tex_content:
+            st.write(f"📚 {len(tex_content):,} chars of LaTeX")
+
+        img_files = []
+        if images_dir.exists():
+            img_files = [f.name for f in images_dir.iterdir() if f.suffix in (".pdf", ".png", ".jpg")]
+
+        llm_note, llm_error = analyze_with_llm(
+            title, author_str, abstract, domain, tex_content, arxiv_id, img_files
+        )
+
+        if llm_note and not llm_error:
+            note_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(note_path, "w", encoding="utf-8") as f:
+                f.write(llm_note)
+            st.write("✅ LLM analysis complete")
+        else:
+            st.write(f"⚠️ LLM failed ({llm_error or 'unknown'}), template preserved")
+
+    # Update knowledge graph
+    run_script(
+        PROJECT_DIR / "paper-analyze" / "scripts" / "update_graph.py",
+        [
+            "--paper-id", arxiv_id,
+            "--title", title,
+            "--domain", domain,
+            "--score", "0",
+            "--vault", vault,
+            "--language", "en",
+        ],
+        cwd=str(PROJECT_DIR / "paper-analyze"),
+    )
+
+    # Mark in DB
+    if db and HAS_MCP:
+        rel_path = f"20_Research/Papers/{domain}/{paper_folder_name}/{paper_folder_name}.md"
+        mgmt_tools.upsert_paper_impl(
+            db, title=title, arxiv_id=arxiv_id, domain=domain,
+            has_note=True, note_path=rel_path, source="arxiv",
+        )
+        paper = db.get_paper(arxiv_id=arxiv_id)
+        if paper:
+            mgmt_tools.record_event_impl(db, paper_id=paper.id, event_type="analyzed")
 
 
 def _search_with_scripts(target_date, categories, max_results, top_n, skip_hot, vault, raw_config):
