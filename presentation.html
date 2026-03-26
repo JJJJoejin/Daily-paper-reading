@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DailyPapers — Automated Paper Reading</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d2e;
+    --card: #232740;
+    --accent: #6c63ff;
+    --accent2: #00c9a7;
+    --accent3: #ff6b6b;
+    --text: #e8e8f0;
+    --muted: #8888a0;
+    --border: #2d3154;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .deck { height: 100vh; width: 100vw; position: relative; }
+
+  .slide {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+  }
+
+  .slide.active { display: flex; opacity: 1; }
+
+  /* Navigation */
+  .nav {
+    position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; z-index: 100;
+  }
+  .nav-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--border); cursor: pointer; transition: all 0.3s;
+    border: none;
+  }
+  .nav-dot.active { background: var(--accent); transform: scale(1.3); }
+  .nav-dot:hover { background: var(--accent); opacity: 0.7; }
+
+  .slide-num {
+    position: fixed; bottom: 32px; right: 40px;
+    font-size: 14px; color: var(--muted); z-index: 100;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .key-hint {
+    position: fixed; bottom: 32px; left: 40px;
+    font-size: 12px; color: var(--muted); z-index: 100;
+  }
+
+  /* Title Slide */
+  .title-slide { text-align: center; }
+  .title-slide h1 {
+    font-size: 3.2em; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 16px; line-height: 1.2;
+  }
+  .title-slide .subtitle {
+    font-size: 1.4em; color: var(--muted); font-weight: 300;
+    margin-bottom: 48px;
+  }
+  .title-slide .meta {
+    font-size: 1em; color: var(--muted);
+    display: flex; gap: 24px; justify-content: center;
+  }
+  .title-slide .coffee { font-size: 4em; margin-bottom: 24px; }
+
+  /* Generic content */
+  h2 {
+    font-size: 2.2em; font-weight: 600; margin-bottom: 40px;
+    text-align: center;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  h3 { font-size: 1.1em; font-weight: 600; color: var(--accent2); margin-bottom: 12px; }
+
+  /* Cards grid */
+  .cards { display: grid; gap: 20px; width: 100%; max-width: 1100px; }
+  .cards-2 { grid-template-columns: 1fr 1fr; }
+  .cards-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .cards-4 { grid-template-columns: 1fr 1fr; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px;
+    transition: transform 0.3s, border-color 0.3s;
+  }
+  .card:hover { transform: translateY(-4px); border-color: var(--accent); }
+  .card p { color: var(--muted); font-size: 0.95em; line-height: 1.6; }
+  .card .icon { font-size: 2em; margin-bottom: 12px; }
+
+  /* Flow diagram */
+  .flow {
+    display: flex; align-items: center; gap: 0;
+    width: 100%; max-width: 1100px; justify-content: center;
+    flex-wrap: wrap;
+  }
+  .flow-step {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px 24px; text-align: center;
+    min-width: 150px;
+  }
+  .flow-step .icon { font-size: 1.8em; margin-bottom: 8px; }
+  .flow-step .label { font-size: 0.85em; font-weight: 500; }
+  .flow-step .detail { font-size: 0.75em; color: var(--muted); margin-top: 4px; }
+  .flow-arrow { font-size: 1.5em; color: var(--accent); padding: 0 8px; }
+
+  /* Scoring table */
+  .score-table {
+    width: 100%; max-width: 800px;
+    border-collapse: separate; border-spacing: 0;
+    background: var(--card); border-radius: 16px;
+    overflow: hidden; border: 1px solid var(--border);
+  }
+  .score-table th {
+    background: var(--surface); padding: 16px 24px;
+    font-weight: 600; text-align: left; color: var(--accent);
+    font-size: 0.9em; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .score-table td {
+    padding: 14px 24px; border-top: 1px solid var(--border);
+    font-size: 0.95em;
+  }
+  .score-table tr:hover td { background: rgba(108,99,255,0.05); }
+  .bar {
+    height: 8px; border-radius: 4px; margin-top: 6px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  /* Feature list */
+  .features {
+    list-style: none; width: 100%; max-width: 900px;
+  }
+  .features li {
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+    font-size: 1.05em;
+  }
+  .features li:last-child { border-bottom: none; }
+  .features .check { color: var(--accent2); font-size: 1.2em; flex-shrink: 0; }
+  .features .feat-label { font-weight: 500; }
+  .features .feat-desc { color: var(--muted); font-size: 0.9em; margin-top: 2px; }
+
+  /* Tech stack */
+  .tech-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; width: 100%; max-width: 900px;
+  }
+  .tech-item {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; text-align: center;
+    transition: border-color 0.3s;
+  }
+  .tech-item:hover { border-color: var(--accent2); }
+  .tech-item .tech-name { font-weight: 600; font-size: 0.95em; margin-bottom: 4px; }
+  .tech-item .tech-role { color: var(--muted); font-size: 0.8em; }
+
+  /* Roadmap */
+  .roadmap { width: 100%; max-width: 900px; }
+  .roadmap-item {
+    display: flex; gap: 20px; padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .roadmap-item:last-child { border-bottom: none; }
+  .roadmap-priority {
+    font-size: 0.75em; font-weight: 600; padding: 4px 12px;
+    border-radius: 20px; height: fit-content; white-space: nowrap;
+  }
+  .priority-high { background: rgba(255,107,107,0.15); color: var(--accent3); }
+  .priority-med { background: rgba(255,190,50,0.15); color: #ffbe32; }
+  .priority-low { background: rgba(108,99,255,0.15); color: var(--accent); }
+  .roadmap-text .roadmap-title { font-weight: 500; margin-bottom: 4px; }
+  .roadmap-text .roadmap-desc { color: var(--muted); font-size: 0.9em; }
+
+  /* End slide */
+  .end-slide { text-align: center; }
+  .end-slide h2 { font-size: 2.8em; margin-bottom: 24px; }
+  .end-slide p { font-size: 1.2em; color: var(--muted); max-width: 600px; line-height: 1.7; }
+  .end-slide .repo {
+    margin-top: 32px; padding: 12px 28px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9em; color: var(--accent);
+    display: inline-block;
+  }
+
+  /* Domain tags */
+  .domain-tags { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+  .domain-tag {
+    padding: 6px 16px; border-radius: 20px; font-size: 0.85em; font-weight: 500;
+    background: rgba(108,99,255,0.12); color: var(--accent); border: 1px solid rgba(108,99,255,0.25);
+  }
+
+  /* Vault structure */
+  .vault-tree {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em; line-height: 2;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px 32px;
+    max-width: 700px; width: 100%;
+  }
+  .vault-tree .folder { color: var(--accent2); }
+  .vault-tree .file { color: var(--muted); }
+  .vault-tree .highlight { color: var(--accent); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+  <!-- Slide 1: Title -->
+  <div class="slide title-slide active" data-index="0">
+    <div class="coffee">☕️</div>
+    <h1>DailyPapers</h1>
+    <p class="subtitle">Your AI Research Assistant — Papers Ready Before Coffee</p>
+    <div class="domain-tags" style="margin-bottom: 32px;">
+      <span class="domain-tag">IS Management</span>
+      <span class="domain-tag">NLP</span>
+      <span class="domain-tag">LLM & Hallucination</span>
+      <span class="domain-tag">Machine Learning</span>
+    </div>
+    <div class="meta">
+      <span>Joe Jin</span>
+      <span>March 2026</span>
+    </div>
+  </div>
+
+  <!-- Slide 2: Problem & Motivation -->
+  <div class="slide" data-index="1">
+    <h2>The Problem</h2>
+    <div class="cards cards-3">
+      <div class="card">
+        <div class="icon">📚</div>
+        <h3>Too Many Papers</h3>
+        <p>Hundreds of new papers published daily on arXiv alone. Impossible to manually track everything relevant.</p>
+      </div>
+      <div class="card">
+        <div class="icon">⏰</div>
+        <h3>Time-Consuming</h3>
+        <p>Searching across arXiv, Semantic Scholar, DBLP, and journals — each with different interfaces and formats.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔗</div>
+        <h3>Lost Connections</h3>
+        <p>Hard to track how new papers relate to what we've already read. Insights slip through the cracks.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 3: Solution Overview -->
+  <div class="slide" data-index="2">
+    <h2>The Solution</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="icon">🔍</div>
+        <div class="label">Search</div>
+        <div class="detail">arXiv · S2 · DBLP · OpenAlex</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="icon">🧠</div>
+        <div class="label">MCP Server</div>
+        <div class="detail">16 tools · SQLite</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="icon">📊</div>
+        <div class="label">Score</div>
+        <div class="detail">4-dimension ranking</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="icon">🤖</div>
+        <div class="label">Analyze</div>
+        <div class="detail">LLM-powered notes</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="icon">📝</div>
+        <div class="label">Obsidian</div>
+        <div class="detail">Notes + Knowledge Graph</div>
+      </div>
+    </div>
+    <p style="color: var(--muted); margin-top: 36px; font-size: 1.05em; text-align: center;">
+      Every morning, your top papers are scored, analyzed, and organized — ready to read.
+    </p>
+  </div>
+
+  <!-- Slide 4: MCP Architecture -->
+  <div class="slide" data-index="3">
+    <h2>MCP Server — The Core</h2>
+    <div class="cards cards-4">
+      <div class="card">
+        <div class="icon">🔍</div>
+        <h3>Search Tools (5)</h3>
+        <p>search_papers · search_arxiv · search_semantic_scholar · search_conference_papers · enrich_papers</p>
+      </div>
+      <div class="card">
+        <div class="icon">📊</div>
+        <h3>Scoring Tools (2)</h3>
+        <p>score_papers · get_recommendations — composite scoring with domain-aware weighting</p>
+      </div>
+      <div class="card">
+        <div class="icon">📂</div>
+        <h3>Management Tools (5)</h3>
+        <p>get_paper · upsert_paper · record_event · add_citation · sync_vault_notes</p>
+      </div>
+      <div class="card">
+        <div class="icon">📈</div>
+        <h3>Analytics Tools (4)</h3>
+        <p>get_stats · get_reading_history · find_duplicates · ping — insights & maintenance</p>
+      </div>
+    </div>
+    <p style="color: var(--muted); margin-top: 28px; font-size: 0.95em; text-align: center;">
+      SQLite backend with WAL mode · Deduplication by arXiv ID · Reading history tracking
+    </p>
+  </div>
+
+  <!-- Slide 5: Scoring System -->
+  <div class="slide" data-index="4">
+    <h2>Smart Paper Scoring</h2>
+    <table class="score-table">
+      <thead>
+        <tr><th>Dimension</th><th>Weight</th><th>How It Works</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>🎯 Relevance</strong></td>
+          <td>40%</td>
+          <td>
+            Keyword match in title & abstract, arXiv category alignment
+            <div class="bar" style="width: 100%;"></div>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>🔥 Popularity</strong></td>
+          <td>30%</td>
+          <td>
+            Citation count, influential citations, hot paper detection
+            <div class="bar" style="width: 75%;"></div>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>🕐 Recency</strong></td>
+          <td>20%</td>
+          <td>
+            Published within 30 days scores highest, decay over 6 months
+            <div class="bar" style="width: 50%;"></div>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>💎 Quality</strong></td>
+          <td>10%</td>
+          <td>
+            Innovation signals, methodology rigor, quantitative results
+            <div class="bar" style="width: 25%;"></div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="color: var(--muted); margin-top: 24px; font-size: 0.9em;">
+      Final score: 0–10 scale · Hot papers get boosted popularity weight (45%)
+    </p>
+  </div>
+
+  <!-- Slide 6: Streamlit UI -->
+  <div class="slide" data-index="5">
+    <h2>Streamlit Web UI — 8 Pages</h2>
+    <div class="cards cards-4">
+      <div class="card">
+        <div class="icon">🏠</div>
+        <h3>Home</h3>
+        <p>Dashboard with domain stats, vault overview, paper counts</p>
+      </div>
+      <div class="card">
+        <div class="icon">☀️</div>
+        <h3>Start My Day</h3>
+        <p>Daily recommendations — one click to search, score, and auto-analyze top papers</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔬</div>
+        <h3>Analyze Paper</h3>
+        <p>Deep analysis with LLM — generates full notes from LaTeX source</p>
+      </div>
+      <div class="card">
+        <div class="icon">🏆</div>
+        <h3>Conference Papers</h3>
+        <p>Search CVPR, ICLR, NeurIPS, ICML, AAAI and more via DBLP</p>
+      </div>
+      <div class="card">
+        <div class="icon">📖</div>
+        <h3>Journal Search</h3>
+        <p>Search journal papers via OpenAlex API</p>
+      </div>
+      <div class="card">
+        <div class="icon">🗄️</div>
+        <h3>Paper Database</h3>
+        <p>Browse, search, and manage the SQLite paper collection</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔎</div>
+        <h3>Search</h3>
+        <p>Full-text search across DB records and vault markdown notes</p>
+      </div>
+      <div class="card">
+        <div class="icon">⚙️</div>
+        <h3>Settings</h3>
+        <p>Configure vault path, run DB maintenance, sync & rescore</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 7: Output — Obsidian Notes -->
+  <div class="slide" data-index="6">
+    <h2>Output — Obsidian Vault</h2>
+    <div style="display: flex; gap: 32px; max-width: 1100px; width: 100%; align-items: flex-start;">
+      <div class="vault-tree" style="flex: 1;">
+        <div><span class="folder">📁 10_Daily/</span></div>
+        <div>&nbsp;&nbsp;<span class="highlight">📄 2026-03-26-paper-recommendations.md</span></div>
+        <div><span class="folder">📁 20_Research/</span></div>
+        <div>&nbsp;&nbsp;<span class="folder">📁 Papers/</span></div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="folder">📁 LLM/</span></div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="folder">📁 2026-03-25_Paper_Title/</span></div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="highlight">📄 Analysis Note.md</span></div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">📁 images/</span></div>
+        <div>&nbsp;&nbsp;<span class="folder">📁 PaperGraph/</span></div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;<span class="file">📄 graph_data.json</span></div>
+      </div>
+      <div style="flex: 1;">
+        <div class="card" style="margin-bottom: 16px;">
+          <h3>Daily Recommendations</h3>
+          <p>Top 10 scored papers with trend analysis, quality distribution, and suggested reading order</p>
+        </div>
+        <div class="card" style="margin-bottom: 16px;">
+          <h3>Deep Analysis Notes</h3>
+          <p>LLM-generated: methodology, experiments, insights, limitations, comparison with related work</p>
+        </div>
+        <div class="card">
+          <h3>Knowledge Graph</h3>
+          <p>Paper relationships — extends, compares, follows — visualizable in Obsidian graph view</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 8: Tech Stack -->
+  <div class="slide" data-index="7">
+    <h2>Tech Stack</h2>
+    <div class="tech-grid">
+      <div class="tech-item">
+        <div class="tech-name">Python</div>
+        <div class="tech-role">Core language</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">MCP Protocol</div>
+        <div class="tech-role">Tool server framework</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">SQLite + WAL</div>
+        <div class="tech-role">Persistent database</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">Streamlit</div>
+        <div class="tech-role">Web UI framework</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">arXiv API</div>
+        <div class="tech-role">Preprint search</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">Semantic Scholar</div>
+        <div class="tech-role">Citation & impact data</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">DBLP</div>
+        <div class="tech-role">Conference papers</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">OpenAlex</div>
+        <div class="tech-role">Journal papers</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">DeepSeek LLM</div>
+        <div class="tech-role">Paper analysis</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">Claude Code</div>
+        <div class="tech-role">CLI skills</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">Obsidian</div>
+        <div class="tech-role">Knowledge base</div>
+      </div>
+      <div class="tech-item">
+        <div class="tech-name">YAML Config</div>
+        <div class="tech-role">Domain definitions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 9: Future Plans -->
+  <div class="slide" data-index="8">
+    <h2>Roadmap</h2>
+    <div class="roadmap">
+      <div class="roadmap-item">
+        <span class="roadmap-priority priority-high">HIGH</span>
+        <div class="roadmap-text">
+          <div class="roadmap-title">Search Performance Optimization</div>
+          <div class="roadmap-desc">Parallel API calls, caching, quick mode — reduce daily search from minutes to seconds</div>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <span class="roadmap-priority priority-high">HIGH</span>
+        <div class="roadmap-text">
+          <div class="roadmap-title">Avoid Duplicate Recommendations</div>
+          <div class="roadmap-desc">Track recommended papers, apply freshness penalty, dismiss functionality</div>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <span class="roadmap-priority priority-med">MED</span>
+        <div class="roadmap-text">
+          <div class="roadmap-title">Paper Database Management UI</div>
+          <div class="roadmap-desc">Delete, edit, export, import, backup — full CRUD from the browser</div>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <span class="roadmap-priority priority-med">MED</span>
+        <div class="roadmap-text">
+          <div class="roadmap-title">Smart Image Extraction</div>
+          <div class="roadmap-desc">Lazy extraction, key figures only, optional per workflow</div>
+        </div>
+      </div>
+      <div class="roadmap-item">
+        <span class="roadmap-priority priority-low">FUTURE</span>
+        <div class="roadmap-text">
+          <div class="roadmap-title">Cloud Deployment & Mobile App</div>
+          <div class="roadmap-desc">PostgreSQL, REST API, multi-user auth, PWA with push notifications, multi-field support</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Slide 10: End -->
+  <div class="slide end-slide" data-index="9">
+    <h2>Demo Time! ☕️</h2>
+    <p>
+      Let me show you the tool in action —<br>
+      from daily paper search to auto-generated analysis notes in Obsidian.
+    </p>
+    <div class="repo">github.com/JJJJoejin/Daily-paper-reading</div>
+    <p style="margin-top: 40px; font-size: 1em;">Thank you, Prof. Tam!</p>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav" id="nav"></div>
+<div class="slide-num" id="slideNum">1 / 10</div>
+<div class="key-hint">← → arrow keys to navigate</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const nav = document.getElementById('nav');
+  const slideNum = document.getElementById('slideNum');
+  let current = 0;
+
+  // Build nav dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => goTo(i);
+    nav.appendChild(dot);
+  });
+
+  function goTo(n) {
+    slides[current].classList.remove('active');
+    nav.children[current].classList.remove('active');
+    current = (n + slides.length) % slides.length;
+    slides[current].classList.add('active');
+    nav.children[current].classList.add('active');
+    slideNum.textContent = `${current + 1} / ${slides.length}`;
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') goTo(current + 1);
+    if (e.key === 'ArrowLeft') goTo(current - 1);
+  });
+
+  // Swipe support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => touchStartX = e.touches[0].clientX);
+  document.addEventListener('touchend', e => {
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) goTo(current + (diff > 0 ? 1 : -1));
+  });
+</script>
+
+</body>
+</html>
