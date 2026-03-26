@@ -116,20 +116,19 @@ streamlit run app.py --server.port 8502 --server.headless true
 
 ```
 YourVault/
-├── 10_Daily/                          # Daily recommendation notes
+├── 10_Daily/                              # Daily recommendation notes
 │   └── YYYY-MM-DD-paper-recommendations.md
 ├── 20_Research/
-│   ├── Papers/                        # Paper analysis notes
-│   │   └── YYYY-MM-DD/               # Date-based organization
-│   │       └── LLM/
-│   │           ├── Paper_Title.md     # Analysis note
-│   │           └── Paper_Title/
-│   │               └── images/        # Extracted figures
+│   ├── Papers/                            # Paper analysis notes
+│   │   └── LLM/                           # Grouped by domain
+│   │       └── 2026-03-25_Paper_Title/    # Self-contained paper folder
+│   │           ├── 2026-03-25_Paper_Title.md   # Analysis note
+│   │           └── images/                # Extracted figures
 │   └── PaperGraph/
-│       └── graph_data.json            # Knowledge graph
+│       └── graph_data.json                # Knowledge graph
 └── 99_System/
     └── Config/
-        └── research_interests.yaml    # Research interests config
+        └── research_interests.yaml        # Research interests config
 ```
 
 ## Project Structure

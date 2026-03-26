@@ -335,7 +335,7 @@ def render_paper_card(paper, index, expanded=False):
 
         if summary:
             with st.expander("Abstract", expanded=expanded):
-                st.write(summary[:500] + ("..." if len(summary) > 500 else ""))
+                st.write(summary)
 
         link_parts = []
         if url:
@@ -729,7 +729,7 @@ Today's {len(papers)} recommended papers span **{', '.join(domains.keys())}**.
 - **Links**: [arXiv]({url}) | [PDF]({pdf_url})
 """
         if i <= 3 and note_filename:
-            note += f"- **Detailed Report**: [[20_Research/Papers/{date_str}/{domain}/{note_filename}]]\n"
+            note += f"- **Detailed Report**: [[20_Research/Papers/{domain}/{date_str}_{note_filename}/{date_str}_{note_filename}]]\n"
 
         note += f"\n**Summary**: {summary}\n\n---\n\n"
 
@@ -801,7 +801,9 @@ def page_paper_analyze():
             st.write("🖼️ Extracting images from arXiv source...")
             safe_title = re.sub(r'[ /\\:*?"<>|]+', '_', title).strip('_')
             today_str = datetime.now().strftime("%Y-%m-%d")
-            images_dir = Path(vault) / "20_Research" / "Papers" / today_str / domain / safe_title / "images"
+            paper_folder_name = f"{today_str}_{safe_title}"
+            paper_folder = Path(vault) / "20_Research" / "Papers" / domain / paper_folder_name
+            images_dir = paper_folder / "images"
             index_path = images_dir / "index.md"
 
             stdout, stderr, rc = run_script(
@@ -856,7 +858,7 @@ def page_paper_analyze():
                 )
 
                 if llm_note and not llm_error:
-                    llm_note_path = Path(vault) / "20_Research" / "Papers" / today_str / domain / f"{safe_title}.md"
+                    llm_note_path = paper_folder / f"{paper_folder_name}.md"
                     llm_note_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(llm_note_path, "w", encoding="utf-8") as f:
                         f.write(llm_note)
@@ -883,7 +885,7 @@ def page_paper_analyze():
 
             # Mark as analyzed in DB
             if db:
-                note_path = f"20_Research/Papers/{today_str}/{domain}/{safe_title}.md"
+                note_path = f"20_Research/Papers/{domain}/{paper_folder_name}/{paper_folder_name}.md"
                 mgmt_tools.upsert_paper_impl(
                     db, title=title, arxiv_id=arxiv_id, domain=domain,
                     has_note=True, note_path=note_path, source="arxiv",
@@ -894,7 +896,7 @@ def page_paper_analyze():
 
             status.update(label="Analysis complete!", state="complete")
 
-        note_path = Path(vault) / "20_Research" / "Papers" / today_str / domain / f"{safe_title}.md"
+        note_path = paper_folder / f"{paper_folder_name}.md"
         st.success(f"✅ Note saved to: `{note_path}`")
 
         st.markdown("### Paper Info")
@@ -1263,7 +1265,7 @@ query: "{query}"
         pdf_url = p.get("pdf_url", "")
         arxiv_id = p.get("arxiv_id", "")
         landing_url = p.get("landing_url", "")
-        abstract = (p.get("abstract", "") or "")[:300]
+        abstract = p.get("abstract", "") or ""
 
         if access_status == "paywalled":
             icon = "🔴"

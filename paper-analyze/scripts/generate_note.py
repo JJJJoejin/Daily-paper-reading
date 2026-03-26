@@ -227,10 +227,11 @@ def main():
     if not domain:
         domain = 'Other'
 
-    note_dir = os.path.join(papers_dir, date, domain)
+    paper_folder_name = f"{date}_{paper_title_safe}"
+    note_dir = os.path.join(papers_dir, domain, paper_folder_name)
     os.makedirs(note_dir, exist_ok=True)
 
-    note_path = os.path.join(note_dir, f"{paper_title_safe}.md")
+    note_path = os.path.join(note_dir, f"{paper_folder_name}.md")
     content = generate_note_content(args.paper_id, args.title, args.authors, domain, date, args.language)
 
     try:
