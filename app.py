@@ -12,7 +12,7 @@ import os
 import sys
 import subprocess
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # --- Configuration ---
@@ -439,16 +439,38 @@ def page_start_my_day():
     default_cats = ",".join(sorted(all_cats)) if all_cats else "cs.AI,cs.LG,cs.CL"
 
     categories = st.text_input("arXiv Categories", value=default_cats)
-    skip_hot = st.checkbox("Skip Semantic Scholar hot papers (faster)", value=False)
+
+    # Source selection
+    st.markdown("**Search Sources**")
+    src_col1, src_col2, src_col3, src_col4 = st.columns(4)
+    with src_col1:
+        search_arxiv = st.checkbox("arXiv", value=True)
+    with src_col2:
+        search_s2 = st.checkbox("Semantic Scholar", value=True)
+    with src_col3:
+        search_conf = st.checkbox("Conferences (DBLP)", value=True)
+    with src_col4:
+        search_journal = st.checkbox("Journals (OpenAlex)", value=True)
+
+    if search_conf:
+        conf_venues = st.text_input("Conference venues", value="CVPR,ICLR,NeurIPS,ICML,AAAI")
+        conf_year = st.number_input("Conference year", value=2025, min_value=2020, max_value=2026)
 
     # Choose search method
     use_mcp = HAS_MCP and st.checkbox("Use MCP database (persistent storage)", value=True)
 
     if st.button("🚀 Search Papers", type="primary", use_container_width=True):
         if use_mcp and mcp_cfg:
-            _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_cfg)
+            _search_with_mcp(
+                target_date, categories, max_results, top_n, mcp_cfg,
+                search_arxiv=search_arxiv, search_s2=search_s2,
+                search_conf=search_conf,
+                conf_venues=conf_venues.split(",") if search_conf else [],
+                conf_year=conf_year if search_conf else 2025,
+                search_journal=search_journal, raw_config=raw_config,
+            )
         else:
-            _search_with_scripts(target_date, categories, max_results, top_n, skip_hot, vault, raw_config)
+            _search_with_scripts(target_date, categories, max_results, top_n, not search_s2, vault, raw_config)
 
     # Show results from session state (persists across reruns)
     if "smd_papers" in st.session_state and st.session_state["smd_papers"]:
@@ -480,7 +502,11 @@ def page_start_my_day():
         st.session_state["smd_note_generated"] = False
 
 
-def _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_cfg):
+def _search_with_mcp(
+    target_date, categories, max_results, top_n, mcp_cfg,
+    search_arxiv=True, search_s2=True, search_conf=False,
+    conf_venues=None, conf_year=2025, search_journal=False, raw_config=None,
+):
     """Run search using MCP tools (persistent DB)."""
     db = get_db()
     if not db:
@@ -498,27 +524,81 @@ def _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_
             st.write(f"Scanned {sync.get('scanned', 0)} notes, matched {sync.get('matched', 0)}")
 
         # Step 2: Search arXiv
-        st.write("🔍 Searching arXiv...")
-        arxiv_result = search_tools.search_arxiv_impl(
-            db, mcp_cfg, categories=cat_list or None,
-            days=30, max_results=max_results,
-        )
-        st.write(f"arXiv: {arxiv_result['fetched']} fetched, {arxiv_result['stored']} stored")
+        if search_arxiv:
+            st.write("🔍 Searching arXiv...")
+            arxiv_result = search_tools.search_arxiv_impl(
+                db, mcp_cfg, categories=cat_list or None,
+                days=30, max_results=max_results,
+            )
+            st.write(f"arXiv: {arxiv_result['fetched']} fetched, {arxiv_result['stored']} stored")
 
         # Step 3: Search S2 hot papers
-        if not skip_hot:
+        if search_s2:
             st.write("🔥 Searching Semantic Scholar hot papers...")
             s2_result = search_tools.search_semantic_scholar_impl(
                 db, mcp_cfg, days=365, top_k=20,
             )
             st.write(f"S2: {s2_result['fetched']} fetched, {s2_result['stored']} stored")
 
-        # Step 4: Score papers
+        # Step 4: Search conference papers (DBLP)
+        if search_conf:
+            venues = [v.strip() for v in (conf_venues or []) if v.strip()]
+            st.write(f"🎓 Searching conferences ({', '.join(venues)}, {conf_year})...")
+            conf_result = search_tools.search_conference_papers_impl(
+                db, mcp_cfg, venues=venues or None, year=conf_year,
+                max_per_venue=200, enrich=True,
+            )
+            st.write(f"DBLP: {conf_result['fetched']} fetched, {conf_result['stored']} stored")
+
+        # Step 5: Search journals (OpenAlex)
+        if search_journal and raw_config:
+            st.write("📰 Searching journals (OpenAlex)...")
+            sys.path.insert(0, str(PROJECT_DIR / "journal-search" / "scripts"))
+            try:
+                from search_journals import search_openalex
+                # Build query from research domain keywords
+                all_keywords = []
+                for d in raw_config.get("research_domains", {}).values():
+                    all_keywords.extend(d.get("keywords", [])[:3])
+                journal_query = " ".join(all_keywords[:10]) if all_keywords else "machine learning"
+
+                journal_papers = search_openalex(
+                    query=journal_query,
+                    from_date=(datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
+                    to_date=datetime.now().strftime("%Y-%m-%d"),
+                    min_citations=0,
+                    journal_only=True,
+                    max_results=50,
+                )
+                # Store in DB
+                journal_stored = 0
+                for jp in journal_papers:
+                    from mcp_paper_db.tools.search import _raw_to_paper
+                    paper = _raw_to_paper({
+                        "title": jp.get("title", ""),
+                        "abstract": jp.get("abstract", ""),
+                        "authors": jp.get("authors", []),
+                        "published_date": jp.get("publication_date"),
+                        "arxiv_id": jp.get("arxiv_id"),
+                        "doi": jp.get("doi"),
+                        "pdf_url": jp.get("pdf_url") or jp.get("oa_url", ""),
+                        "arxiv_url": jp.get("landing_url", ""),
+                        "categories": jp.get("concepts", []),
+                        "citationCount": jp.get("cited_by_count", 0),
+                    }, source="openalex")
+                    if paper.title:
+                        db.upsert_paper(paper)
+                        journal_stored += 1
+                st.write(f"OpenAlex: {len(journal_papers)} fetched, {journal_stored} stored")
+            except Exception as e:
+                st.write(f"⚠️ Journal search failed: {e}")
+
+        # Step 6: Score papers
         st.write("📊 Scoring papers...")
         scored = scoring_tools.score_papers_impl(db, mcp_cfg, limit=500)
         st.write(f"Scored {scored['scored']} papers")
 
-        # Step 5: Get recommendations
+        # Step 7: Get recommendations
         st.write("⭐ Getting top recommendations...")
         recs = scoring_tools.get_recommendations_impl(db, limit=top_n)
 
