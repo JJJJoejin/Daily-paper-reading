@@ -276,6 +276,22 @@ class PaperDatabase:
         ).fetchone()[0]
         return run
 
+    def get_recent_search_run(
+        self, search_type: str, max_age_hours: int = 6
+    ) -> Optional[dict]:
+        """Check if a search of this type ran recently (within max_age_hours).
+
+        Returns the most recent matching run or None.
+        """
+        row = self.conn.execute(
+            "SELECT id, search_type, query_params_json, result_count, status, run_date "
+            "FROM search_runs "
+            "WHERE search_type = ? AND run_date >= datetime('now', ?) AND status = 'completed' "
+            "ORDER BY run_date DESC LIMIT 1",
+            (search_type, f"-{max_age_hours} hours"),
+        ).fetchone()
+        return dict(row) if row else None
+
     # -- Keywords --
 
     def add_keyword(self, paper_id: int, keyword: str, keyword_type: str):

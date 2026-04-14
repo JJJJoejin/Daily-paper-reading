@@ -4,3 +4,7 @@ __pycache__/
 .venv/
 config.yaml
 *.db
+*.db-shm
+*.db-wal
+mcp-paper-db/search_logs/
+finance-news-mcp/

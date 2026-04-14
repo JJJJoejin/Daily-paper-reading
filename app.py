@@ -12,7 +12,9 @@ import os
 import sys
 import subprocess
 import re
-from datetime import datetime
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # --- Configuration ---
@@ -335,7 +337,7 @@ def render_paper_card(paper, index, expanded=False):
 
         if summary:
             with st.expander("Abstract", expanded=expanded):
-                st.write(summary[:500] + ("..." if len(summary) > 500 else ""))
+                st.write(summary)
 
         link_parts = []
         if url:
@@ -439,16 +441,72 @@ def page_start_my_day():
     default_cats = ",".join(sorted(all_cats)) if all_cats else "cs.AI,cs.LG,cs.CL"
 
     categories = st.text_input("arXiv Categories", value=default_cats)
-    skip_hot = st.checkbox("Skip Semantic Scholar hot papers (faster)", value=False)
+
+    # Quick mode toggle
+    quick_mode = st.checkbox("Quick Mode (arXiv only — fastest)", value=False)
+
+    # Source selection
+    st.markdown("**Search Sources**")
+    src_col1, src_col2, src_col3, src_col4 = st.columns(4)
+    with src_col1:
+        search_arxiv = st.checkbox("arXiv", value=True, disabled=quick_mode)
+    with src_col2:
+        search_s2 = st.checkbox("Semantic Scholar", value=not quick_mode, disabled=quick_mode)
+    with src_col3:
+        search_conf = st.checkbox("Conferences (DBLP)", value=not quick_mode, disabled=quick_mode)
+    with src_col4:
+        search_journal = st.checkbox("Journals (OpenAlex)", value=not quick_mode, disabled=quick_mode)
+
+    if quick_mode:
+        search_arxiv, search_s2, search_conf, search_journal = True, False, False, False
+
+    if search_conf:
+        conf_venues = st.text_input("Conference venues", value="CVPR,ICLR,NeurIPS,ICML,AAAI")
+        conf_year = st.number_input("Conference year", value=2025, min_value=2020, max_value=2026)
+
+    # Performance options
+    with st.expander("Performance Options"):
+        perf_col1, perf_col2 = st.columns(2)
+        with perf_col1:
+            cache_hours = st.number_input(
+                "Skip source if searched within N hours",
+                value=6, min_value=0, max_value=48,
+                help="Set to 0 to always re-fetch",
+            )
+        with perf_col2:
+            enrich_dblp = st.checkbox(
+                "Enrich DBLP with S2 (slow)",
+                value=False,
+                help="Fetches abstracts/citations from Semantic Scholar for each DBLP paper. Can be very slow.",
+            )
+        parallel_search = st.checkbox(
+            "Search sources in parallel",
+            value=True,
+            help="Run independent searches concurrently using threads",
+        )
+
+    # Auto-analyze
+    auto_analyze = st.number_input("Auto-analyze top N papers", value=3, min_value=0, max_value=10)
 
     # Choose search method
     use_mcp = HAS_MCP and st.checkbox("Use MCP database (persistent storage)", value=True)
 
     if st.button("🚀 Search Papers", type="primary", use_container_width=True):
         if use_mcp and mcp_cfg:
-            _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_cfg)
+            _search_with_mcp(
+                target_date, categories, max_results, top_n, mcp_cfg,
+                search_arxiv=search_arxiv, search_s2=search_s2,
+                search_conf=search_conf,
+                conf_venues=conf_venues.split(",") if search_conf else [],
+                conf_year=conf_year if search_conf else 2025,
+                search_journal=search_journal, raw_config=raw_config,
+                auto_analyze=auto_analyze,
+                cache_hours=cache_hours,
+                enrich_dblp=enrich_dblp,
+                parallel=parallel_search,
+            )
         else:
-            _search_with_scripts(target_date, categories, max_results, top_n, skip_hot, vault, raw_config)
+            _search_with_scripts(target_date, categories, max_results, top_n, not search_s2, vault, raw_config)
 
     # Show results from session state (persists across reruns)
     if "smd_papers" in st.session_state and st.session_state["smd_papers"]:
@@ -480,7 +538,32 @@ def page_start_my_day():
         st.session_state["smd_note_generated"] = False
 
 
-def _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_cfg):
+def _save_search_log(timings: dict, search_results: dict):
+    """Save search timing log to mcp-paper-db/search_logs/ for analysis."""
+    log_dir = PROJECT_DIR / "mcp-paper-db" / "search_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"search_{timestamp}.json"
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "timings_seconds": timings,
+        "results": {
+            stype: {"fetched": r.get("fetched", 0), "stored": r.get("stored", 0)}
+            for stype, r in search_results.items()
+        },
+    }
+    try:
+        log_file.write_text(json.dumps(log_data, indent=2))
+    except Exception:
+        pass  # non-critical
+
+
+def _search_with_mcp(
+    target_date, categories, max_results, top_n, mcp_cfg,
+    search_arxiv=True, search_s2=True, search_conf=False,
+    conf_venues=None, conf_year=2025, search_journal=False, raw_config=None,
+    auto_analyze=3, cache_hours=6, enrich_dblp=False, parallel=True,
+):
     """Run search using MCP tools (persistent DB)."""
     db = get_db()
     if not db:
@@ -488,41 +571,143 @@ def _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_
         return
 
     cat_list = [c.strip() for c in categories.split(",") if c.strip()]
+    timings = {}  # step_name -> seconds
+    total_start = time.time()
+
+    def _timed(name, fn, *args, **kwargs):
+        """Run fn and record elapsed time under name."""
+        t0 = time.time()
+        result = fn(*args, **kwargs)
+        timings[name] = round(time.time() - t0, 1)
+        return result
+
+    # --- Helper functions for each search source (used by parallel & sequential) ---
+
+    def _do_arxiv():
+        return search_tools.search_arxiv_impl(
+            db, mcp_cfg, categories=cat_list or None,
+            days=30, max_results=max_results,
+        )
+
+    def _do_s2():
+        return search_tools.search_semantic_scholar_impl(
+            db, mcp_cfg, days=365, top_k=20,
+        )
+
+    def _do_conf():
+        venues = [v.strip() for v in (conf_venues or []) if v.strip()]
+        return search_tools.search_conference_papers_impl(
+            db, mcp_cfg, venues=venues or None, year=conf_year,
+            max_per_venue=200, enrich=enrich_dblp,
+        )
+
+    def _do_journal():
+        sys.path.insert(0, str(PROJECT_DIR / "journal-search" / "scripts"))
+        from search_journals import search_openalex
+        from mcp_paper_db.tools.search import _raw_to_paper
+        all_keywords = []
+        for d in (raw_config or {}).get("research_domains", {}).values():
+            all_keywords.extend(d.get("keywords", [])[:3])
+        journal_query = " ".join(all_keywords[:10]) if all_keywords else "machine learning"
+        journal_papers = search_openalex(
+            query=journal_query,
+            from_date=(datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
+            to_date=datetime.now().strftime("%Y-%m-%d"),
+            min_citations=0, journal_only=True, max_results=50,
+        )
+        stored = 0
+        for jp in journal_papers:
+            paper = _raw_to_paper({
+                "title": jp.get("title", ""),
+                "abstract": jp.get("abstract", ""),
+                "authors": jp.get("authors", []),
+                "published_date": jp.get("publication_date"),
+                "arxiv_id": jp.get("arxiv_id"),
+                "doi": jp.get("doi"),
+                "pdf_url": jp.get("pdf_url") or jp.get("oa_url", ""),
+                "arxiv_url": jp.get("landing_url", ""),
+                "categories": jp.get("concepts", []),
+                "citationCount": jp.get("cited_by_count", 0),
+            }, source="openalex")
+            if paper.title:
+                db.upsert_paper(paper)
+                stored += 1
+        return {"fetched": len(journal_papers), "stored": stored, "source": "openalex"}
 
     with st.status("Searching with MCP database...", expanded=True) as status:
         # Step 1: Sync vault notes
         vault = get_vault_path()
         if vault:
-            st.write("📂 Syncing vault notes...")
-            sync = mgmt_tools.sync_vault_notes_impl(db, mcp_cfg)
-            st.write(f"Scanned {sync.get('scanned', 0)} notes, matched {sync.get('matched', 0)}")
+            st.write("Syncing vault notes...")
+            sync = _timed("vault_sync", mgmt_tools.sync_vault_notes_impl, db, mcp_cfg)
+            st.write(f"Scanned {sync.get('scanned', 0)} notes, matched {sync.get('matched', 0)} ({timings['vault_sync']}s)")
 
-        # Step 2: Search arXiv
-        st.write("🔍 Searching arXiv...")
-        arxiv_result = search_tools.search_arxiv_impl(
-            db, mcp_cfg, categories=cat_list or None,
-            days=30, max_results=max_results,
-        )
-        st.write(f"arXiv: {arxiv_result['fetched']} fetched, {arxiv_result['stored']} stored")
+        # Determine which sources to actually fetch (cache check)
+        sources_to_run = {}
+        source_map = {
+            "arxiv": (search_arxiv, _do_arxiv),
+            "semantic_scholar": (search_s2, _do_s2),
+            "conference": (search_conf, _do_conf),
+            "openalex": (search_journal and bool(raw_config), _do_journal),
+        }
+        for stype, (enabled, fn) in source_map.items():
+            if not enabled:
+                continue
+            if cache_hours > 0:
+                recent = db.get_recent_search_run(stype, max_age_hours=cache_hours)
+                if recent:
+                    st.write(f"Skipping {stype} (cached {recent['run_date']})")
+                    continue
+            sources_to_run[stype] = fn
 
-        # Step 3: Search S2 hot papers
-        if not skip_hot:
-            st.write("🔥 Searching Semantic Scholar hot papers...")
-            s2_result = search_tools.search_semantic_scholar_impl(
-                db, mcp_cfg, days=365, top_k=20,
-            )
-            st.write(f"S2: {s2_result['fetched']} fetched, {s2_result['stored']} stored")
+        # Run searches (parallel or sequential)
+        search_results = {}
+        if sources_to_run:
+            source_labels = {
+                "arxiv": "arXiv", "semantic_scholar": "Semantic Scholar",
+                "conference": "DBLP", "openalex": "OpenAlex",
+            }
+            if parallel and len(sources_to_run) > 1:
+                st.write(f"Searching {len(sources_to_run)} sources in parallel...")
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    futures = {}
+                    for stype, fn in sources_to_run.items():
+                        futures[executor.submit(lambda s=stype, f=fn: _timed(s, f))] = stype
+                    for future in as_completed(futures):
+                        stype = futures[future]
+                        try:
+                            result = future.result()
+                            search_results[stype] = result
+                            elapsed = timings.get(stype, "?")
+                            st.write(f"{source_labels[stype]}: {result['fetched']} fetched, {result['stored']} stored ({elapsed}s)")
+                        except Exception as e:
+                            st.write(f"{source_labels[stype]} failed: {e}")
+                            timings[stype] = -1
+            else:
+                for stype, fn in sources_to_run.items():
+                    st.write(f"Searching {source_labels[stype]}...")
+                    try:
+                        result = _timed(stype, fn)
+                        search_results[stype] = result
+                        st.write(f"{source_labels[stype]}: {result['fetched']} fetched, {result['stored']} stored ({timings[stype]}s)")
+                    except Exception as e:
+                        st.write(f"{source_labels[stype]} failed: {e}")
+                        timings[stype] = -1
 
-        # Step 4: Score papers
-        st.write("📊 Scoring papers...")
-        scored = scoring_tools.score_papers_impl(db, mcp_cfg, limit=500)
-        st.write(f"Scored {scored['scored']} papers")
+        # Score papers
+        st.write("Scoring papers...")
+        scored = _timed("scoring", scoring_tools.score_papers_impl, db, mcp_cfg, limit=500)
+        st.write(f"Scored {scored['scored']} papers ({timings['scoring']}s)")
 
-        # Step 5: Get recommendations
-        st.write("⭐ Getting top recommendations...")
-        recs = scoring_tools.get_recommendations_impl(db, limit=top_n)
+        # Get recommendations
+        st.write("Getting top recommendations...")
+        recs = _timed("recommendations", scoring_tools.get_recommendations_impl, db, limit=top_n)
 
-        status.update(label="Search complete!", state="complete")
+        timings["total"] = round(time.time() - total_start, 1)
+        status.update(label=f"Search complete! ({timings['total']}s total)", state="complete")
+
+    # Save search log
+    _save_search_log(timings, search_results)
 
     if not recs:
         st.warning("No recommendations found.")
@@ -564,6 +749,127 @@ def _search_with_mcp(target_date, categories, max_results, top_n, skip_hot, mcp_
             mgmt_tools.record_event_impl(db, paper_id=r["id"], event_type="recommended", recommendation_rank=i)
         except Exception:
             pass
+
+    # Auto-analyze top 3 papers
+    vault = get_vault_path()
+    if vault and auto_analyze > 0:
+        analyzable = [p for p in papers if p.get("arxiv_id")][:auto_analyze]
+        if analyzable:
+            st.markdown("---")
+            st.markdown(f"### Auto-Analyzing Top {len(analyzable)} Papers")
+            for i, paper in enumerate(analyzable, 1):
+                arxiv_id = paper["arxiv_id"]
+                title = paper["title"]
+                domain = paper.get("domain") or paper.get("matched_domain") or "Other"
+                authors = paper.get("authors", [])
+                if isinstance(authors, list) and authors and isinstance(authors[0], dict):
+                    author_str = ", ".join(a.get("name", "") for a in authors[:5])
+                else:
+                    author_str = ", ".join(authors[:5]) if authors else ""
+                abstract = paper.get("abstract", "") or paper.get("summary", "")
+
+                with st.status(f"Analyzing {i}/{len(analyzable)}: {title[:60]}...", expanded=True) as astatus:
+                    try:
+                        _auto_analyze_single(
+                            arxiv_id, title, author_str, domain, abstract, vault, db
+                        )
+                        astatus.update(label=f"✅ {title[:50]}...", state="complete")
+                    except Exception as e:
+                        astatus.update(label=f"⚠️ Failed: {title[:50]}...", state="error")
+                        st.write(f"Error: {e}")
+
+
+def _auto_analyze_single(arxiv_id, title, author_str, domain, abstract, vault, db):
+    """Analyze a single paper: extract images, LLM analysis, write note."""
+    safe_title = re.sub(r'[ /\\:*?"<>|]+', '_', title).strip('_')
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    paper_folder_name = f"{today_str}_{safe_title}"
+    paper_folder = Path(vault) / "20_Research" / "Papers" / domain / paper_folder_name
+    images_dir = paper_folder / "images"
+    note_path = paper_folder / f"{paper_folder_name}.md"
+
+    # Skip if already analyzed
+    if note_path.exists() and note_path.stat().st_size > 500:
+        st.write(f"⏭️ Already analyzed, skipping")
+        return
+
+    # Extract images
+    st.write("🖼️ Extracting images...")
+    index_path = images_dir / "index.md"
+    stdout, stderr, rc = run_script(
+        PROJECT_DIR / "extract-paper-images" / "scripts" / "extract_images.py",
+        [arxiv_id, str(images_dir), str(index_path)],
+        cwd=str(PROJECT_DIR / "extract-paper-images"),
+    )
+    image_count = 0
+    if rc == 0:
+        image_paths = [line for line in stdout.strip().split("\n") if line.startswith("images/")]
+        image_count = len(image_paths)
+        st.write(f"✅ {image_count} images extracted")
+    else:
+        st.write("⚠️ Image extraction failed, continuing")
+
+    # Generate template note first (fallback)
+    run_script(
+        PROJECT_DIR / "paper-analyze" / "scripts" / "generate_note.py",
+        [
+            "--paper-id", arxiv_id,
+            "--title", title,
+            "--authors", author_str,
+            "--domain", domain,
+            "--vault", vault,
+            "--language", "en",
+        ],
+        cwd=str(PROJECT_DIR / "paper-analyze"),
+    )
+
+    # LLM analysis
+    if os.environ.get("LLM_API_KEY"):
+        st.write("🤖 Running LLM analysis...")
+        tex_content = fetch_tex_content(arxiv_id)
+        if tex_content:
+            st.write(f"📚 {len(tex_content):,} chars of LaTeX")
+
+        img_files = []
+        if images_dir.exists():
+            img_files = [f.name for f in images_dir.iterdir() if f.suffix in (".pdf", ".png", ".jpg")]
+
+        llm_note, llm_error = analyze_with_llm(
+            title, author_str, abstract, domain, tex_content, arxiv_id, img_files
+        )
+
+        if llm_note and not llm_error:
+            note_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(note_path, "w", encoding="utf-8") as f:
+                f.write(llm_note)
+            st.write("✅ LLM analysis complete")
+        else:
+            st.write(f"⚠️ LLM failed ({llm_error or 'unknown'}), template preserved")
+
+    # Update knowledge graph
+    run_script(
+        PROJECT_DIR / "paper-analyze" / "scripts" / "update_graph.py",
+        [
+            "--paper-id", arxiv_id,
+            "--title", title,
+            "--domain", domain,
+            "--score", "0",
+            "--vault", vault,
+            "--language", "en",
+        ],
+        cwd=str(PROJECT_DIR / "paper-analyze"),
+    )
+
+    # Mark in DB
+    if db and HAS_MCP:
+        rel_path = f"20_Research/Papers/{domain}/{paper_folder_name}/{paper_folder_name}.md"
+        mgmt_tools.upsert_paper_impl(
+            db, title=title, arxiv_id=arxiv_id, domain=domain,
+            has_note=True, note_path=rel_path, source="arxiv",
+        )
+        paper = db.get_paper(arxiv_id=arxiv_id)
+        if paper:
+            mgmt_tools.record_event_impl(db, paper_id=paper.id, event_type="analyzed")
 
 
 def _search_with_scripts(target_date, categories, max_results, top_n, skip_hot, vault, raw_config):
@@ -729,7 +1035,7 @@ Today's {len(papers)} recommended papers span **{', '.join(domains.keys())}**.
 - **Links**: [arXiv]({url}) | [PDF]({pdf_url})
 """
         if i <= 3 and note_filename:
-            note += f"- **Detailed Report**: [[20_Research/Papers/{date_str}/{domain}/{note_filename}]]\n"
+            note += f"- **Detailed Report**: [[20_Research/Papers/{domain}/{date_str}_{note_filename}/{date_str}_{note_filename}]]\n"
 
         note += f"\n**Summary**: {summary}\n\n---\n\n"
 
@@ -801,7 +1107,9 @@ def page_paper_analyze():
             st.write("🖼️ Extracting images from arXiv source...")
             safe_title = re.sub(r'[ /\\:*?"<>|]+', '_', title).strip('_')
             today_str = datetime.now().strftime("%Y-%m-%d")
-            images_dir = Path(vault) / "20_Research" / "Papers" / today_str / domain / safe_title / "images"
+            paper_folder_name = f"{today_str}_{safe_title}"
+            paper_folder = Path(vault) / "20_Research" / "Papers" / domain / paper_folder_name
+            images_dir = paper_folder / "images"
             index_path = images_dir / "index.md"
 
             stdout, stderr, rc = run_script(
@@ -856,7 +1164,7 @@ def page_paper_analyze():
                 )
 
                 if llm_note and not llm_error:
-                    llm_note_path = Path(vault) / "20_Research" / "Papers" / today_str / domain / f"{safe_title}.md"
+                    llm_note_path = paper_folder / f"{paper_folder_name}.md"
                     llm_note_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(llm_note_path, "w", encoding="utf-8") as f:
                         f.write(llm_note)
@@ -883,7 +1191,7 @@ def page_paper_analyze():
 
             # Mark as analyzed in DB
             if db:
-                note_path = f"20_Research/Papers/{today_str}/{domain}/{safe_title}.md"
+                note_path = f"20_Research/Papers/{domain}/{paper_folder_name}/{paper_folder_name}.md"
                 mgmt_tools.upsert_paper_impl(
                     db, title=title, arxiv_id=arxiv_id, domain=domain,
                     has_note=True, note_path=note_path, source="arxiv",
@@ -894,7 +1202,7 @@ def page_paper_analyze():
 
             status.update(label="Analysis complete!", state="complete")
 
-        note_path = Path(vault) / "20_Research" / "Papers" / today_str / domain / f"{safe_title}.md"
+        note_path = paper_folder / f"{paper_folder_name}.md"
         st.success(f"✅ Note saved to: `{note_path}`")
 
         st.markdown("### Paper Info")
@@ -1263,7 +1571,7 @@ query: "{query}"
         pdf_url = p.get("pdf_url", "")
         arxiv_id = p.get("arxiv_id", "")
         landing_url = p.get("landing_url", "")
-        abstract = (p.get("abstract", "") or "")[:300]
+        abstract = p.get("abstract", "") or ""
 
         if access_status == "paywalled":
             icon = "🔴"
