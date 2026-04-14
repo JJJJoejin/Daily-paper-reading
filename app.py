@@ -12,6 +12,8 @@ import os
 import sys
 import subprocess
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -440,21 +442,48 @@ def page_start_my_day():
 
     categories = st.text_input("arXiv Categories", value=default_cats)
 
+    # Quick mode toggle
+    quick_mode = st.checkbox("Quick Mode (arXiv only — fastest)", value=False)
+
     # Source selection
     st.markdown("**Search Sources**")
     src_col1, src_col2, src_col3, src_col4 = st.columns(4)
     with src_col1:
-        search_arxiv = st.checkbox("arXiv", value=True)
+        search_arxiv = st.checkbox("arXiv", value=True, disabled=quick_mode)
     with src_col2:
-        search_s2 = st.checkbox("Semantic Scholar", value=True)
+        search_s2 = st.checkbox("Semantic Scholar", value=not quick_mode, disabled=quick_mode)
     with src_col3:
-        search_conf = st.checkbox("Conferences (DBLP)", value=True)
+        search_conf = st.checkbox("Conferences (DBLP)", value=not quick_mode, disabled=quick_mode)
     with src_col4:
-        search_journal = st.checkbox("Journals (OpenAlex)", value=True)
+        search_journal = st.checkbox("Journals (OpenAlex)", value=not quick_mode, disabled=quick_mode)
+
+    if quick_mode:
+        search_arxiv, search_s2, search_conf, search_journal = True, False, False, False
 
     if search_conf:
         conf_venues = st.text_input("Conference venues", value="CVPR,ICLR,NeurIPS,ICML,AAAI")
         conf_year = st.number_input("Conference year", value=2025, min_value=2020, max_value=2026)
+
+    # Performance options
+    with st.expander("Performance Options"):
+        perf_col1, perf_col2 = st.columns(2)
+        with perf_col1:
+            cache_hours = st.number_input(
+                "Skip source if searched within N hours",
+                value=6, min_value=0, max_value=48,
+                help="Set to 0 to always re-fetch",
+            )
+        with perf_col2:
+            enrich_dblp = st.checkbox(
+                "Enrich DBLP with S2 (slow)",
+                value=False,
+                help="Fetches abstracts/citations from Semantic Scholar for each DBLP paper. Can be very slow.",
+            )
+        parallel_search = st.checkbox(
+            "Search sources in parallel",
+            value=True,
+            help="Run independent searches concurrently using threads",
+        )
 
     # Auto-analyze
     auto_analyze = st.number_input("Auto-analyze top N papers", value=3, min_value=0, max_value=10)
@@ -472,6 +501,9 @@ def page_start_my_day():
                 conf_year=conf_year if search_conf else 2025,
                 search_journal=search_journal, raw_config=raw_config,
                 auto_analyze=auto_analyze,
+                cache_hours=cache_hours,
+                enrich_dblp=enrich_dblp,
+                parallel=parallel_search,
             )
         else:
             _search_with_scripts(target_date, categories, max_results, top_n, not search_s2, vault, raw_config)
@@ -506,11 +538,31 @@ def page_start_my_day():
         st.session_state["smd_note_generated"] = False
 
 
+def _save_search_log(timings: dict, search_results: dict):
+    """Save search timing log to mcp-paper-db/search_logs/ for analysis."""
+    log_dir = PROJECT_DIR / "mcp-paper-db" / "search_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"search_{timestamp}.json"
+    log_data = {
+        "timestamp": datetime.now().isoformat(),
+        "timings_seconds": timings,
+        "results": {
+            stype: {"fetched": r.get("fetched", 0), "stored": r.get("stored", 0)}
+            for stype, r in search_results.items()
+        },
+    }
+    try:
+        log_file.write_text(json.dumps(log_data, indent=2))
+    except Exception:
+        pass  # non-critical
+
+
 def _search_with_mcp(
     target_date, categories, max_results, top_n, mcp_cfg,
     search_arxiv=True, search_s2=True, search_conf=False,
     conf_venues=None, conf_year=2025, search_journal=False, raw_config=None,
-    auto_analyze=3,
+    auto_analyze=3, cache_hours=6, enrich_dblp=False, parallel=True,
 ):
     """Run search using MCP tools (persistent DB)."""
     db = get_db()
@@ -519,95 +571,143 @@ def _search_with_mcp(
         return
 
     cat_list = [c.strip() for c in categories.split(",") if c.strip()]
+    timings = {}  # step_name -> seconds
+    total_start = time.time()
+
+    def _timed(name, fn, *args, **kwargs):
+        """Run fn and record elapsed time under name."""
+        t0 = time.time()
+        result = fn(*args, **kwargs)
+        timings[name] = round(time.time() - t0, 1)
+        return result
+
+    # --- Helper functions for each search source (used by parallel & sequential) ---
+
+    def _do_arxiv():
+        return search_tools.search_arxiv_impl(
+            db, mcp_cfg, categories=cat_list or None,
+            days=30, max_results=max_results,
+        )
+
+    def _do_s2():
+        return search_tools.search_semantic_scholar_impl(
+            db, mcp_cfg, days=365, top_k=20,
+        )
+
+    def _do_conf():
+        venues = [v.strip() for v in (conf_venues or []) if v.strip()]
+        return search_tools.search_conference_papers_impl(
+            db, mcp_cfg, venues=venues or None, year=conf_year,
+            max_per_venue=200, enrich=enrich_dblp,
+        )
+
+    def _do_journal():
+        sys.path.insert(0, str(PROJECT_DIR / "journal-search" / "scripts"))
+        from search_journals import search_openalex
+        from mcp_paper_db.tools.search import _raw_to_paper
+        all_keywords = []
+        for d in (raw_config or {}).get("research_domains", {}).values():
+            all_keywords.extend(d.get("keywords", [])[:3])
+        journal_query = " ".join(all_keywords[:10]) if all_keywords else "machine learning"
+        journal_papers = search_openalex(
+            query=journal_query,
+            from_date=(datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
+            to_date=datetime.now().strftime("%Y-%m-%d"),
+            min_citations=0, journal_only=True, max_results=50,
+        )
+        stored = 0
+        for jp in journal_papers:
+            paper = _raw_to_paper({
+                "title": jp.get("title", ""),
+                "abstract": jp.get("abstract", ""),
+                "authors": jp.get("authors", []),
+                "published_date": jp.get("publication_date"),
+                "arxiv_id": jp.get("arxiv_id"),
+                "doi": jp.get("doi"),
+                "pdf_url": jp.get("pdf_url") or jp.get("oa_url", ""),
+                "arxiv_url": jp.get("landing_url", ""),
+                "categories": jp.get("concepts", []),
+                "citationCount": jp.get("cited_by_count", 0),
+            }, source="openalex")
+            if paper.title:
+                db.upsert_paper(paper)
+                stored += 1
+        return {"fetched": len(journal_papers), "stored": stored, "source": "openalex"}
 
     with st.status("Searching with MCP database...", expanded=True) as status:
         # Step 1: Sync vault notes
         vault = get_vault_path()
         if vault:
-            st.write("📂 Syncing vault notes...")
-            sync = mgmt_tools.sync_vault_notes_impl(db, mcp_cfg)
-            st.write(f"Scanned {sync.get('scanned', 0)} notes, matched {sync.get('matched', 0)}")
+            st.write("Syncing vault notes...")
+            sync = _timed("vault_sync", mgmt_tools.sync_vault_notes_impl, db, mcp_cfg)
+            st.write(f"Scanned {sync.get('scanned', 0)} notes, matched {sync.get('matched', 0)} ({timings['vault_sync']}s)")
 
-        # Step 2: Search arXiv
-        if search_arxiv:
-            st.write("🔍 Searching arXiv...")
-            arxiv_result = search_tools.search_arxiv_impl(
-                db, mcp_cfg, categories=cat_list or None,
-                days=30, max_results=max_results,
-            )
-            st.write(f"arXiv: {arxiv_result['fetched']} fetched, {arxiv_result['stored']} stored")
+        # Determine which sources to actually fetch (cache check)
+        sources_to_run = {}
+        source_map = {
+            "arxiv": (search_arxiv, _do_arxiv),
+            "semantic_scholar": (search_s2, _do_s2),
+            "conference": (search_conf, _do_conf),
+            "openalex": (search_journal and bool(raw_config), _do_journal),
+        }
+        for stype, (enabled, fn) in source_map.items():
+            if not enabled:
+                continue
+            if cache_hours > 0:
+                recent = db.get_recent_search_run(stype, max_age_hours=cache_hours)
+                if recent:
+                    st.write(f"Skipping {stype} (cached {recent['run_date']})")
+                    continue
+            sources_to_run[stype] = fn
 
-        # Step 3: Search S2 hot papers
-        if search_s2:
-            st.write("🔥 Searching Semantic Scholar hot papers...")
-            s2_result = search_tools.search_semantic_scholar_impl(
-                db, mcp_cfg, days=365, top_k=20,
-            )
-            st.write(f"S2: {s2_result['fetched']} fetched, {s2_result['stored']} stored")
+        # Run searches (parallel or sequential)
+        search_results = {}
+        if sources_to_run:
+            source_labels = {
+                "arxiv": "arXiv", "semantic_scholar": "Semantic Scholar",
+                "conference": "DBLP", "openalex": "OpenAlex",
+            }
+            if parallel and len(sources_to_run) > 1:
+                st.write(f"Searching {len(sources_to_run)} sources in parallel...")
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    futures = {}
+                    for stype, fn in sources_to_run.items():
+                        futures[executor.submit(lambda s=stype, f=fn: _timed(s, f))] = stype
+                    for future in as_completed(futures):
+                        stype = futures[future]
+                        try:
+                            result = future.result()
+                            search_results[stype] = result
+                            elapsed = timings.get(stype, "?")
+                            st.write(f"{source_labels[stype]}: {result['fetched']} fetched, {result['stored']} stored ({elapsed}s)")
+                        except Exception as e:
+                            st.write(f"{source_labels[stype]} failed: {e}")
+                            timings[stype] = -1
+            else:
+                for stype, fn in sources_to_run.items():
+                    st.write(f"Searching {source_labels[stype]}...")
+                    try:
+                        result = _timed(stype, fn)
+                        search_results[stype] = result
+                        st.write(f"{source_labels[stype]}: {result['fetched']} fetched, {result['stored']} stored ({timings[stype]}s)")
+                    except Exception as e:
+                        st.write(f"{source_labels[stype]} failed: {e}")
+                        timings[stype] = -1
 
-        # Step 4: Search conference papers (DBLP)
-        if search_conf:
-            venues = [v.strip() for v in (conf_venues or []) if v.strip()]
-            st.write(f"🎓 Searching conferences ({', '.join(venues)}, {conf_year})...")
-            conf_result = search_tools.search_conference_papers_impl(
-                db, mcp_cfg, venues=venues or None, year=conf_year,
-                max_per_venue=200, enrich=True,
-            )
-            st.write(f"DBLP: {conf_result['fetched']} fetched, {conf_result['stored']} stored")
+        # Score papers
+        st.write("Scoring papers...")
+        scored = _timed("scoring", scoring_tools.score_papers_impl, db, mcp_cfg, limit=500)
+        st.write(f"Scored {scored['scored']} papers ({timings['scoring']}s)")
 
-        # Step 5: Search journals (OpenAlex)
-        if search_journal and raw_config:
-            st.write("📰 Searching journals (OpenAlex)...")
-            sys.path.insert(0, str(PROJECT_DIR / "journal-search" / "scripts"))
-            try:
-                from search_journals import search_openalex
-                # Build query from research domain keywords
-                all_keywords = []
-                for d in raw_config.get("research_domains", {}).values():
-                    all_keywords.extend(d.get("keywords", [])[:3])
-                journal_query = " ".join(all_keywords[:10]) if all_keywords else "machine learning"
+        # Get recommendations
+        st.write("Getting top recommendations...")
+        recs = _timed("recommendations", scoring_tools.get_recommendations_impl, db, limit=top_n)
 
-                journal_papers = search_openalex(
-                    query=journal_query,
-                    from_date=(datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d"),
-                    to_date=datetime.now().strftime("%Y-%m-%d"),
-                    min_citations=0,
-                    journal_only=True,
-                    max_results=50,
-                )
-                # Store in DB
-                journal_stored = 0
-                for jp in journal_papers:
-                    from mcp_paper_db.tools.search import _raw_to_paper
-                    paper = _raw_to_paper({
-                        "title": jp.get("title", ""),
-                        "abstract": jp.get("abstract", ""),
-                        "authors": jp.get("authors", []),
-                        "published_date": jp.get("publication_date"),
-                        "arxiv_id": jp.get("arxiv_id"),
-                        "doi": jp.get("doi"),
-                        "pdf_url": jp.get("pdf_url") or jp.get("oa_url", ""),
-                        "arxiv_url": jp.get("landing_url", ""),
-                        "categories": jp.get("concepts", []),
-                        "citationCount": jp.get("cited_by_count", 0),
-                    }, source="openalex")
-                    if paper.title:
-                        db.upsert_paper(paper)
-                        journal_stored += 1
-                st.write(f"OpenAlex: {len(journal_papers)} fetched, {journal_stored} stored")
-            except Exception as e:
-                st.write(f"⚠️ Journal search failed: {e}")
+        timings["total"] = round(time.time() - total_start, 1)
+        status.update(label=f"Search complete! ({timings['total']}s total)", state="complete")
 
-        # Step 6: Score papers
-        st.write("📊 Scoring papers...")
-        scored = scoring_tools.score_papers_impl(db, mcp_cfg, limit=500)
-        st.write(f"Scored {scored['scored']} papers")
-
-        # Step 7: Get recommendations
-        st.write("⭐ Getting top recommendations...")
-        recs = scoring_tools.get_recommendations_impl(db, limit=top_n)
-
-        status.update(label="Search complete!", state="complete")
+    # Save search log
+    _save_search_log(timings, search_results)
 
     if not recs:
         st.warning("No recommendations found.")
