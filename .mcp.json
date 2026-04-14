@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "paper-db": {
+      "command": ".venv/bin/python",
+      "args": ["mcp-paper-db/server.py"],
+      "env": {
+        "OBSIDIAN_VAULT_PATH": "/Users/joe/Documents/Obsidian Vault",
+        "PAPER_DB_PATH": "mcp-paper-db/papers.db"
+      }
+    },
+    "finance-news": {
+      "command": "uv",
+      "args": ["--directory", "finance-news-mcp", "run", "python", "main.py"]
+    },
+    "rss": {
+      "command": "npx",
+      "args": ["rss-mcp"]
+    }
+  }
+}
